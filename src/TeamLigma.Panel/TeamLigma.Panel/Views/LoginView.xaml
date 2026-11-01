@@ -1,16 +1,81 @@
 <UserControl x:Class="TeamLigma.Panel.Views.LoginView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <Grid Background="{StaticResource TlBg}">
-    <Border Width="440" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource TlCardStyle}" Padding="32,28">
-      <StackPanel Spacing="16">
-        <Border CornerRadius="8" Background="White" Padding="4" HorizontalAlignment="Center" Width="260">
-          <Image Source="ms-appx:///Assets/teamligma.png" Stretch="Uniform" />
-        </Border>
+  <Grid x:Name="Root" Background="{StaticResource TlBg}">
+    <!-- warm glow rising from the fire below and behind the emblem -->
+    <Rectangle IsHitTestVisible="False">
+      <Rectangle.Fill>
+        <RadialGradientBrush Center="0.5,0.32" GradientOrigin="0.5,0.32" RadiusX="0.55" RadiusY="0.5">
+          <GradientStop Color="#38CC5500" Offset="0" />
+          <GradientStop Color="#14CC5500" Offset="0.55" />
+          <GradientStop Color="#00CC5500" Offset="1" />
+        </RadialGradientBrush>
+      </Rectangle.Fill>
+    </Rectangle>
+    <Rectangle IsHitTestVisible="False">
+      <Rectangle.Fill>
+        <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+          <GradientStop Color="#00000000" Offset="0.55" />
+          <GradientStop Color="#33A33A08" Offset="0.85" />
+          <GradientStop Color="#66CC5500" Offset="1" />
+        </LinearGradientBrush>
+      </Rectangle.Fill>
+    </Rectangle>
+
+    <!-- animated fire and embers (driven from code-behind) -->
+    <Canvas x:Name="FireLayer" IsHitTestVisible="False" />
+    <Canvas x:Name="EmberLayer" IsHitTestVisible="False" />
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollMode="Disabled">
+      <StackPanel HorizontalAlignment="Stretch" MaxWidth="452" VerticalAlignment="Center" Spacing="14" Padding="16,28,16,40">
+
+        <!-- emblem with a pulsing heat halo -->
+        <Grid Width="230" Height="230" HorizontalAlignment="Center">
+          <Ellipse x:Name="Halo" Width="380" Height="380" Margin="-75" IsHitTestVisible="False">
+            <Ellipse.Fill>
+              <RadialGradientBrush>
+                <GradientStop Color="#FFFF9A4A" Offset="0" />
+                <GradientStop Color="#B3E0661A" Offset="0.32" />
+                <GradientStop Color="#4DA33A08" Offset="0.6" />
+                <GradientStop Color="#00A33A08" Offset="1" />
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+          <Image x:Name="Emblem" Source="ms-appx:///Assets/LoginEmblem.png" Stretch="Uniform" Width="210" Height="210"
+                 RenderTransformOrigin="0.5,0.5">
+            <Image.RenderTransform>
+              <CompositeTransform x:Name="EmblemTransform" />
+            </Image.RenderTransform>
+          </Image>
+        </Grid>
+
+        <StackPanel Spacing="2" HorizontalAlignment="Center">
+          <!-- engraved gold title: dark offset copy behind a solid gold face (Skia does not paint gradient text) -->
+          <Grid HorizontalAlignment="Center">
+            <TextBlock Text="TEAM LIGMA" FontSize="42" CharacterSpacing="80" Foreground="#FF2A1606" Margin="0,3,0,0"
+                       FontFamily="ms-appx:///Assets/Fonts/cinzel-decorative-latin-700-normal.ttf#Cinzel Decorative" />
+            <TextBlock Text="TEAM LIGMA" FontSize="42" CharacterSpacing="80" Foreground="#FFE8C577"
+                       FontFamily="ms-appx:///Assets/Fonts/cinzel-decorative-latin-700-normal.ttf#Cinzel Decorative" />
+          </Grid>
+          <TextBlock Text="DEVELOPMENT PANEL" HorizontalAlignment="Center" FontSize="13" CharacterSpacing="420"
+                     Foreground="{StaticResource TlTextSecondary}"
+                     FontFamily="ms-appx:///Assets/Fonts/cinzel-latin-700-normal.ttf#Cinzel" />
+        </StackPanel>
+
+        <!-- sign-in card: Claude-dark surface with an ember edge -->
+        <Border HorizontalAlignment="Stretch" Style="{StaticResource TlCardStyle}" Padding="26,24" Margin="0,8,0,0">
+          <Border.BorderBrush>
+            <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
+              <GradientStop Color="#FFCC5500" Offset="0" />
+              <GradientStop Color="#663D3C38" Offset="0.35" />
+              <GradientStop Color="#FF3D3C38" Offset="1" />
+            </LinearGradientBrush>
+          </Border.BorderBrush>
+          <StackPanel Spacing="16">
         <StackPanel Spacing="4">
           <TextBlock x:Name="Heading" Style="{StaticResource TlPageTitle}" FontSize="22" Text="Sign in" HorizontalAlignment="Center" />
           <TextBlock x:Name="SubHeading" Foreground="{StaticResource TlTextMuted}" TextWrapping="Wrap" TextAlignment="Center"
-                     Text="Team Ligma Development Panel" />
+                     Text="Enter the realm with your panel account." />
         </StackPanel>
 
         <Border x:Name="MessageBox" Visibility="Collapsed" CornerRadius="6" Padding="12,8" Background="#3A2420" BorderBrush="{StaticResource TlDanger}" BorderThickness="1">
@@ -38,7 +103,9 @@
           <TextBlock x:Name="SubmitText" Text="Sign in" FontWeight="SemiBold" />
         </Button>
         <HyperlinkButton x:Name="BackLink" Content="← Back" Visibility="Collapsed" Click="OnBack" HorizontalAlignment="Center" />
+          </StackPanel>
+        </Border>
       </StackPanel>
-    </Border>
+    </ScrollViewer>
   </Grid>
 </UserControl>

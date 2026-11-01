@@ -23,7 +23,9 @@ public sealed partial class LoginView : UserControl
             SubmitText.Text = "Create account";
         }
         if (message != null) ShowMessage(message, isError: !message.StartsWith("You have been"));
-        Loaded += (_, _) => UserBox.Focus(FocusState.Programmatic);
+        Loaded += (_, _) => { UserBox.Focus(FocusState.Programmatic); StartEffects(); };
+        Unloaded += (_, _) => StopEffects();
+        Root.SizeChanged += (_, _) => BuildFire();
     }
 
     void ShowMessage(string? text, bool isError = true)
@@ -109,7 +111,7 @@ public sealed partial class LoginView : UserControl
         PasswordStep.Visibility = Visibility.Visible;
         TotpStep.Visibility = BackLink.Visibility = Visibility.Collapsed;
         Heading.Text = "Sign in";
-        SubHeading.Text = "Team Ligma Development Panel";
+        SubHeading.Text = "Enter the realm with your panel account.";
         SubmitText.Text = "Sign in";
         PassBox.Password = "";
         PassBox.Focus(FocusState.Programmatic);

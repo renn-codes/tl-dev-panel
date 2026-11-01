@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.6.0**
+**Version 1.7.0**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -12,6 +12,23 @@ The panel has two parts:
 nginx serves both on port **26767**.
 
 ---
+
+## Sign-in screen
+The sign-in screen keeps the Claude-dark card and burnt-orange accents, set against:
+- the Team Ligma emblem, floating gently in front of a pulsing heat halo;
+- an engraved gold "TEAM LIGMA" title in Cinzel Decorative;
+- a flickering fire line along the bottom edge;
+- embers that rise, sway and flicker across the screen.
+
+The effects run only while the screen is visible, and stop as soon as you sign in. The layout adapts down to phone width.
+
+Files:
+- `Views/LoginView.xaml`: the layout.
+- `Views/LoginView.Effects.cs`: the fire, embers, halo and float, driven by one 30 fps timer.
+- `Assets/LoginEmblem.png`: the emblem.
+- `Assets/Fonts/cinzel-*.ttf`: Cinzel, SIL OFL 1.1; see `OFL-Cinzel.txt`.
+
+The browser tab icon is the panel's own `favicon.ico`. It's linked from `index.html` (it ships in `Platforms/WebAssembly/loading/favicon.ico`), and `deploy/install.sh` also installs it as the site's `/favicon.ico` in place of the icon Uno generates.
 
 ## Settings
 Administrators get a **Settings** page. Leave a field empty to use the default shown in grey. Changes apply to the next build, task or server start, and every save is recorded in the audit log.

@@ -20,6 +20,14 @@ mv "$PANEL/server.new" "$PANEL/server"
 mv "$PANEL/web.new/wwwroot" "$PANEL/wwwroot"
 rm -rf "$PANEL/web.new"
 
+# Site favicon: Uno generates /favicon.ico from its app icon; replace it with the panel's icon
+# (index.html also links it explicitly from the app package).
+FAVICON="$ROOT/src/TeamLigma.Panel/TeamLigma.Panel/Platforms/WebAssembly/loading/favicon.ico"
+if [ -f "$FAVICON" ]; then
+    install -m 0644 "$FAVICON" "$PANEL/wwwroot/favicon.ico"
+    rm -f "$PANEL/wwwroot/favicon.ico.gz" "$PANEL/wwwroot/favicon.ico.br"
+fi
+
 echo "==> Configuring nginx (port 26767)"
 install -m 0644 "$ROOT/deploy/nginx-teamligma-panel.conf" /etc/nginx/sites-available/teamligma-panel
 ln -sf /etc/nginx/sites-available/teamligma-panel /etc/nginx/sites-enabled/teamligma-panel
