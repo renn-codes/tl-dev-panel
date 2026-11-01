@@ -90,6 +90,26 @@ public static class Shell
         return null;
     }
 
+    /// <summary>True only when the pid is alive AND is a ninja-dash process (pids get reused after reboots).</summary>
+    public static bool IsNinjaDash(int? pid)
+    {
+        if (!PidAlive(pid)) return false;
+        try { return File.ReadAllText($"/proc/{pid}/cmdline").Replace('\0', ' ').Contains("ninja-dash"); }
+        catch { return false; }
+    }
+
+    /// <summary>Resolves an executable on a PATH string, like `command -v`.</summary>
+    public static string? Which(string name, string path)
+    {
+        foreach (var dir in path.Split(':', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var full = System.IO.Path.Combine(dir, name);
+            if (File.Exists(full) && (File.GetUnixFileMode(full) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0)
+                return full;
+        }
+        return null;
+    }
+
     public static bool PidAlive(int? pid)
     {
         if (pid is null or <= 0) return false;

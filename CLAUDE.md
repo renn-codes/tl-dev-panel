@@ -33,7 +33,7 @@ This section is to relavent to the entire project. It details Requirements, Reso
   - Build Console
     - This contains build controls and the detailed build status
       - Build controls:
-        - Starting a build (`screen -dmS build ninja-dash /roc/claude/claude-acore/build -- -j8 -k 0`).
+        - Starting a build+install (`ninja -j$(( $(nproc) - 1 ))`, then `ninja install`).
         - Preparing the build directory (`cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DWITH_WARNINGS=0 -DTOOLS_BUILD=all -DSCRIPTS=static -DMODULES=static`)
         - Force stopping the currently running build, with a confirmation warning dialog.
         - Preforming a build directory clean (`ninja -t clean`).

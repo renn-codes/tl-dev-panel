@@ -73,31 +73,51 @@ public sealed partial class OverviewView : UserControl, IPanelPage
         DiskIoText.Text = $"R {Fmt.Rate(s.DiskReadBps)} · W {Fmt.Rate(s.DiskWriteBps)}";
         OsText.Text = s.Os;
 
-        ComponentsPanel.Children.Clear();
-        foreach (var c in s.Components)
+        // Rows are created once and updated in place; rebuilding them every poll makes them flash.
+        foreach (var comp in s.Components)
         {
-            var g = new Grid { ColumnSpacing = 8 };
-            foreach (var w in new[] { 1.0, 70, 64, 84 })
-                g.ColumnDefinitions.Add(new ColumnDefinition { Width = w == 1.0 ? new GridLength(1, GridUnitType.Star) : new GridLength(w) });
-            var namePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            namePanel.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse
+            if (!_components.TryGetValue(comp.Name, out var row))
             {
-                Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center,
-                Fill = new SolidColorBrush(c.Running ? Windows.UI.Color.FromArgb(255, 0x6F, 0xBF, 0x73) : Windows.UI.Color.FromArgb(255, 0x55, 0x54, 0x50)),
-            });
-            namePanel.Children.Add(new TextBlock { Text = Titles.GetValueOrDefault(c.Name, c.Name), Foreground = (Brush)Application.Current.Resources[c.Running ? "TlText" : "TlTextMuted"] });
-            g.Children.Add(namePanel);
-            AddCell(g, 1, c.Running ? c.Pid?.ToString() ?? "" : "—");
-            AddCell(g, 2, c.Running ? $"{c.Cpu:0.0}%" : "—");
-            AddCell(g, 3, c.Running ? Fmt.Bytes(c.RssBytes) : "—");
-            ComponentsPanel.Children.Add(g);
+                row = NewComponentRow(comp.Name);
+                _components[comp.Name] = row;
+                ComponentsPanel.Children.Add(row.Root);
+            }
+            Set(row.Dot, comp.Running ? RunningDot : StoppedDot);
+            var nameBrush = (Brush)Application.Current.Resources[comp.Running ? "TlText" : "TlTextMuted"];
+            if (row.Name.Foreground != nameBrush) row.Name.Foreground = nameBrush;
+            SetText(row.Pid, comp.Running ? comp.Pid?.ToString() ?? "" : "—");
+            SetText(row.Cpu, comp.Running ? $"{comp.Cpu:0.0}%" : "—");
+            SetText(row.Mem, comp.Running ? Fmt.Bytes(comp.RssBytes) : "—");
         }
     }
 
-    static void AddCell(Grid g, int col, string text)
+    sealed record ComponentRow(Grid Root, Microsoft.UI.Xaml.Shapes.Ellipse Dot, TextBlock Name, TextBlock Pid, TextBlock Cpu, TextBlock Mem);
+    readonly Dictionary<string, ComponentRow> _components = new();
+    static readonly SolidColorBrush RunningDot = new(Windows.UI.Color.FromArgb(255, 0x6F, 0xBF, 0x73));
+    static readonly SolidColorBrush StoppedDot = new(Windows.UI.Color.FromArgb(255, 0x55, 0x54, 0x50));
+
+    static void SetText(TextBlock t, string text) { if (t.Text != text) t.Text = text; }
+    static void Set(Microsoft.UI.Xaml.Shapes.Ellipse e, Brush b) { if (e.Fill != b) e.Fill = b; }
+
+    static ComponentRow NewComponentRow(string name)
     {
-        var t = new TextBlock { Text = text, Style = (Style)Application.Current.Resources["TlMonoText"] };
+        var g = new Grid { ColumnSpacing = 8 };
+        foreach (var w in new[] { 1.0, 70, 64, 84 })
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = w == 1.0 ? new GridLength(1, GridUnitType.Star) : new GridLength(w) });
+        var namePanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var dot = new Microsoft.UI.Xaml.Shapes.Ellipse { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center, Fill = StoppedDot };
+        var title = new TextBlock { Text = Titles.GetValueOrDefault(name, name) };
+        namePanel.Children.Add(dot);
+        namePanel.Children.Add(title);
+        g.Children.Add(namePanel);
+        return new ComponentRow(g, dot, title, AddCell(g, 1), AddCell(g, 2), AddCell(g, 3));
+    }
+
+    static TextBlock AddCell(Grid g, int col)
+    {
+        var t = new TextBlock { Text = "—", Style = (Style)Application.Current.Resources["TlMonoText"] };
         Grid.SetColumn(t, col);
         g.Children.Add(t);
+        return t;
     }
 }

@@ -142,6 +142,7 @@ api.MapGet("/builds/{id:int}/log", (int id, long? offset, bool? full, BuildServi
         s.Phase is "building" or "installing", full ?? false));
 });
 api.MapGet("/build/console", (string? key, long? offset, BuildService b) => b.Console(key, offset ?? -1));
+api.MapGet("/build/settings", (BuildService b) => b.Settings());
 api.MapGet("/servers", (ConsoleService c) => c.StatusAsync());
 api.MapGet("/servers/{name}/output", (string name, long? offset, ConsoleService c) => c.Output(name, offset ?? -1));
 
@@ -151,6 +152,9 @@ op.MapPost("/build/start", async (HttpContext ctx, BuildService b, AuthService a
 op.MapPost("/build/stop", async (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "force stop build", await b.StopBuildAsync()));
 op.MapPost("/build/configure", (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "prepare (cmake)", b.Configure()));
 op.MapPost("/build/clean", (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "clean", b.Clean()));
+op.MapPost("/build/directory", (HttpContext ctx, PathRequest r, BuildService b, AuthService a) => Logged(ctx, a, $"set build directory {r.Path}", b.SetBuildDir(r.Path)));
+op.MapGet("/fs/dirs", (string? path, BuildService b) => DirBrowser.List(string.IsNullOrWhiteSpace(path) ? b.BuildDir : path));
+op.MapPost("/fs/mkdir", (HttpContext ctx, PathRequest r, AuthService a) => Logged(ctx, a, $"create folder {r.Path}", DirBrowser.Create(r.Path)));
 op.MapPost("/servers/{name}/start", async (HttpContext ctx, string name, ConsoleService c, AuthService a) => Logged(ctx, a, $"start {name}", await c.StartAsync(name)));
 op.MapPost("/servers/{name}/input", async (HttpContext ctx, string name, InputRequest req, ConsoleService c, AuthService a) =>
     // Never log what is typed into MySQL (it may be a password).

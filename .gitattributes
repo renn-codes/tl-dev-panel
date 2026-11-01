@@ -1,0 +1,8 @@
+# Keep Unix line endings for everything that runs on the Debian server.
+* text=auto eol=lf
+tools/ninja-dash text eol=lf
+*.sh text eol=lf
+*.png binary
+*.ttf binary
+*.gz binary
+*.bundle binary

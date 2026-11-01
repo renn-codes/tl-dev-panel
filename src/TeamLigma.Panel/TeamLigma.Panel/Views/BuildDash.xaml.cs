@@ -66,19 +66,29 @@ public sealed partial class BuildDash : UserControl
         var shown = objs.Take(MaxObjects).ToList();
         ObjectsCount.Text = objs.Count > 0 ? $"{objs.Count} active job(s)" : "";
         NoObjects.Visibility = shown.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-        while (_rows.Count < shown.Count) _rows.Add(NewRow());
-        ObjectsPanel.Children.Clear();
-        for (var i = 0; i < shown.Count; i++)
+        // Rows stay attached and are shown/hidden; re-adding them every update makes them flash.
+        while (_rows.Count < shown.Count)
         {
-            var o = shown[i];
+            var row = NewRow();
+            _rows.Add(row);
+            ObjectsPanel.Children.Add(row.Root);
+        }
+        for (var i = 0; i < _rows.Count; i++)
+        {
             var r = _rows[i];
+            if (i >= shown.Count)
+            {
+                if (r.Root.Visibility != Visibility.Collapsed) r.Root.Visibility = Visibility.Collapsed;
+                continue;
+            }
+            var o = shown[i];
             var name = !string.IsNullOrEmpty(o.Source) ? System.IO.Path.GetFileName(o.Source) : System.IO.Path.GetFileName(o.Output);
-            r.Name.Text = $"{o.Kind}  {name}";
-            var ratio = o.EstimateMs > 0 ? Math.Min(0.97, (double)o.ElapsedMs / o.EstimateMs) : 0;
-            r.Bar.Value = ratio;
-            r.Detail.Text = $"{o.ElapsedMs / 1000.0:0}s / ~{o.EstimateMs / 1000.0:0}s";
-            ToolTipService.SetToolTip(r.Root, o.Output);
-            ObjectsPanel.Children.Add(r.Root);
+            var label = $"{o.Kind}  {name}";
+            if (r.Name.Text != label) { r.Name.Text = label; ToolTipService.SetToolTip(r.Root, o.Output); }
+            r.Bar.Value = o.EstimateMs > 0 ? Math.Min(0.97, (double)o.ElapsedMs / o.EstimateMs) : 0;
+            var detail = $"{o.ElapsedMs / 1000.0:0}s / ~{o.EstimateMs / 1000.0:0}s";
+            if (r.Detail.Text != detail) r.Detail.Text = detail;
+            if (r.Root.Visibility != Visibility.Visible) r.Root.Visibility = Visibility.Visible;
         }
     }
 

@@ -12,10 +12,11 @@
     </Grid.RowDefinitions>
     <StackPanel Spacing="2">
       <TextBlock Style="{StaticResource TlPageTitle}" Text="Build Console" />
-      <TextBlock Foreground="{StaticResource TlTextMuted}" Text="Prepare, compile, install and clean the AzerothCore tree at /roc/claude/claude-acore." />
+      <TextBlock Foreground="{StaticResource TlTextMuted}" x:Name="Subtitle" Text="Prepare, compile, install and clean the AzerothCore tree." />
     </StackPanel>
 
     <Border Grid.Row="1" Style="{StaticResource TlCardStyle}" Padding="16,12">
+      <StackPanel Spacing="12">
       <Grid ColumnSpacing="10">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
@@ -24,19 +25,19 @@
           <ColumnDefinition Width="*" />
           <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
-        <Button x:Name="StartButton" Style="{StaticResource AccentButtonStyle}" Padding="18,8" Click="OnStart"
-                ToolTipService.ToolTip="screen -dmS build ninja-dash /roc/claude/claude-acore/build -- -j8 -k 0">
-          <TextBlock Text="▶  Start Build" FontWeight="SemiBold" />
+        <Button x:Name="StartButton" Style="{StaticResource AccentButtonStyle}" Height="40" Padding="18,0" VerticalAlignment="Center" VerticalContentAlignment="Center" Click="OnStart"
+                ToolTipService.ToolTip="ninja -j$(( $(nproc) - 1 )), then ninja install">
+          <TextBlock Text="▶  Start Build" LineHeight="18" LineStackingStrategy="BlockLineHeight" VerticalAlignment="Center" FontWeight="SemiBold" />
         </Button>
-        <Button x:Name="ConfigureButton" Grid.Column="1" Padding="16,8" Click="OnConfigure"
+        <Button x:Name="ConfigureButton" Grid.Column="1" Height="40" Padding="16,0" VerticalAlignment="Center" VerticalContentAlignment="Center" Click="OnConfigure"
                 ToolTipService.ToolTip="cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ ...">
-          <TextBlock Text="⚙  Prepare (CMake)" />
+          <TextBlock Text="Prepare (CMake)" LineHeight="18" LineStackingStrategy="BlockLineHeight" VerticalAlignment="Center" />
         </Button>
-        <Button x:Name="CleanButton" Grid.Column="2" Padding="16,8" Click="OnClean" ToolTipService.ToolTip="ninja -t clean">
-          <TextBlock Text="✦  Clean" />
+        <Button x:Name="CleanButton" Grid.Column="2" Height="40" Padding="16,0" VerticalAlignment="Center" VerticalContentAlignment="Center" Click="OnClean" ToolTipService.ToolTip="ninja -t clean">
+          <TextBlock Text="Clean" LineHeight="18" LineStackingStrategy="BlockLineHeight" VerticalAlignment="Center" />
         </Button>
         <TextBlock x:Name="TaskText" Grid.Column="3" VerticalAlignment="Center" Margin="12,0" Foreground="{StaticResource TlTextMuted}" TextTrimming="CharacterEllipsis" />
-        <Button x:Name="StopButton" Grid.Column="4" Padding="16,8" Click="OnStop" Background="{StaticResource TlDanger}" Foreground="White">
+        <Button x:Name="StopButton" Grid.Column="4" Height="40" Padding="16,0" VerticalAlignment="Center" VerticalContentAlignment="Center" Click="OnStop" Background="{StaticResource TlDanger}" Foreground="White">
           <Button.Resources>
             <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#DC4F48" />
             <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#A8332E" />
@@ -44,9 +45,26 @@
             <SolidColorBrush x:Key="ButtonForegroundPressed" Color="White" />
             <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="#3A2A28" />
           </Button.Resources>
-          <TextBlock Text="■  Force Stop" FontWeight="SemiBold" />
+          <TextBlock Text="■  Force Stop" LineHeight="18" LineStackingStrategy="BlockLineHeight" VerticalAlignment="Center" FontWeight="SemiBold" />
         </Button>
       </Grid>
+      <Grid ColumnSpacing="10" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Style="{StaticResource TlLabel}" Text="BUILD DIRECTORY" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+          <TextBlock x:Name="BuildDirText" Style="{StaticResource TlMonoText}" Foreground="{StaticResource TlText}" FontSize="13" VerticalAlignment="Center" Text="—" />
+          <Border x:Name="BuildDirPill" CornerRadius="10" Padding="9,2" Background="#555450" VerticalAlignment="Center">
+            <TextBlock x:Name="BuildDirState" FontSize="11.5" FontWeight="SemiBold" Foreground="White" Text="…" />
+          </Border>
+        </StackPanel>
+        <Button x:Name="BrowseButton" Grid.Column="2" Height="32" Padding="14,0" VerticalContentAlignment="Center" Content="Change…" Click="OnBrowse"
+                ToolTipService.ToolTip="Pick the Ninja build directory on the server" />
+      </Grid>
+      </StackPanel>
     </Border>
 
     <Border Grid.Row="2" Style="{StaticResource TlCardStyle}">

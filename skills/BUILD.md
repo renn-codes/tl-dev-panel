@@ -6,6 +6,6 @@ This project is now using `ninja` as its build system, over the Azerothcore proj
 
 ## Common Build System Commands
 - Configure: `cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DWITH_WARNINGS=0 -DTOOLS_BUILD=all -DSCRIPTS=static -DMODULES=static`
-- Build: `screen -dmS build ninja-dash /roc/claude/claude-acore/build -- -j8 -k 0`
+- Build: `ninja -j$(( $(nproc) - 1 ))`
 - Install: `ninja install`
 - Clean: `ninja -t clean`

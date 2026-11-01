@@ -7,7 +7,10 @@ public sealed class PanelOptions
     public string InstallDir { get; set; } = "/roc/claude/live";
     public string BinDir { get; set; } = "/roc/claude/live/bin";
     public string DataHome { get; set; } = "/roc/claude/panel-data";
-    public string BuildCommand { get; set; } = "";
+    /// <summary>Compile command, run with bash in the build directory.</summary>
+    public string BuildCommand { get; set; } = "ninja -j$(( $(nproc) - 1 ))";
+    /// <summary>Install command, run only when the compile succeeded.</summary>
+    public string InstallCommand { get; set; } = "ninja install";
     public string ConfigureCommand { get; set; } = "";
     public string CleanCommand { get; set; } = "";
     public string WorldCommand { get; set; } = "";

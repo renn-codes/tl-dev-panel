@@ -25,6 +25,9 @@ namespace TeamLigma.Panel.Services;
 [JsonSerializable(typeof(CreateUserRequest))]
 [JsonSerializable(typeof(SetRoleRequest))]
 [JsonSerializable(typeof(List<UserInfo>))]
+[JsonSerializable(typeof(BuildSettings))]
+[JsonSerializable(typeof(DirListing))]
+[JsonSerializable(typeof(PathRequest))]
 internal partial class PanelJson : JsonSerializerContext { }
 
 /// <summary>Thin client for the panel backend (same origin, proxied by nginx under /api).</summary>
@@ -144,6 +147,15 @@ public sealed class ApiClient
         {
             Content = JsonContent.Create(new InputRequest { Text = text }, PanelJson.Default.InputRequest),
         });
+
+    // ---- Build directory ----
+    public Task<BuildSettings?> BuildSettingsAsync() => Get("api/build/settings", PanelJson.Default.BuildSettings);
+    public Task<DirListing?> ListDirsAsync(string? path)
+        => Get($"api/fs/dirs?path={Uri.EscapeDataString(path ?? "")}", PanelJson.Default.DirListing);
+    public Task<ActionResult> SetBuildDirAsync(string path)
+        => PostBody("api/build/directory", new PathRequest { Path = path }, PanelJson.Default.PathRequest);
+    public Task<ActionResult> MakeDirAsync(string path)
+        => PostBody("api/fs/mkdir", new PathRequest { Path = path }, PanelJson.Default.PathRequest);
 
     // ---- Authentication & accounts ----
     public Task<AuthState?> AuthStateAsync() => Get("api/auth/state", PanelJson.Default.AuthState);

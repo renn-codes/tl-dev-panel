@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """ninja-dash - Team Ligma build runner.
 
-Usage: ninja-dash BUILD_DIR -- [ninja args...]
+Usage:
+  ninja-dash BUILD_DIR --build-cmd "CMD" [--install-cmd "CMD"]
+  ninja-dash BUILD_DIR -- [ninja args...]          (legacy: runs `ninja ARGS`, then `ninja install`)
 
-Runs `ninja` (then `ninja install` on success) inside BUILD_DIR, mirroring all
-output to the terminal while recording a numbered build record that the
-Team Ligma Development Panel reads:
+Runs the build command (then the install command, only if the build succeeded)
+through bash inside BUILD_DIR, mirroring all output to the terminal while
+recording a numbered build record that the Team Ligma Development Panel reads.
+The panel uses:  --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd 'ninja install'
+
 
     $NINJA_DASH_HOME/builds/<n>/status.json   live machine-readable status
     $NINJA_DASH_HOME/builds/<n>/build.log     full build + install log
@@ -13,7 +17,7 @@ Team Ligma Development Panel reads:
 NINJA_DASH_HOME defaults to /roc/claude/panel-data.
 Set NINJA_DASH_NO_INSTALL=1 to skip the install step.
 """
-import json, os, re, signal, subprocess, sys, threading, time
+import json, os, re, shlex, signal, subprocess, sys, threading, time
 from datetime import datetime, timezone
 
 HOME = os.environ.get("NINJA_DASH_HOME", "/roc/claude/panel-data")
@@ -33,6 +37,17 @@ def pid_alive(pid):
         return False
 
 
+def is_ninja_dash(pid):
+    """Alive AND actually ninja-dash: pids are reused after a reboot or container restart."""
+    if not pid_alive(pid):
+        return False
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return b"ninja-dash" in f.read()
+    except OSError:
+        return False
+
+
 def running_build():
     if not os.path.isdir(BUILDS):
         return None
@@ -43,7 +58,7 @@ def running_build():
                 s = json.load(f)
         except Exception:
             continue
-        if s.get("phase") in ("building", "installing") and pid_alive(s.get("pid")):
+        if s.get("phase") in ("building", "installing") and is_ninja_dash(s.get("pid")):
             return s
     return None
 
@@ -86,9 +101,10 @@ def load_durations(build_dir):
 
 
 class Dash:
-    def __init__(self, build_dir, ninja_args):
+    def __init__(self, build_dir, build_cmd, install_cmd):
         self.build_dir = os.path.abspath(build_dir)
-        self.ninja_args = ninja_args
+        self.build_cmd = build_cmd
+        self.install_cmd = install_cmd
         self.id = next_id()
         self.dir = os.path.join(BUILDS, str(self.id))
         os.makedirs(self.dir, exist_ok=True)
@@ -101,7 +117,8 @@ class Dash:
         self.avg = (sum(known) / len(known)) if known else 15000
         self.s = {
             "id": self.id, "pid": os.getpid(), "buildDir": self.build_dir,
-            "command": "ninja " + " ".join(ninja_args),
+            "command": build_cmd,
+            "installCommand": install_cmd,
             "started": now_iso(), "ended": None, "phase": "building",
             "step": "Starting ninja", "done": 0, "total": 0,
             "installDone": 0, "installTotal": 0,
@@ -222,10 +239,10 @@ class Dash:
             signal.signal(sig, self.stop)
         self.emit(f"== ninja-dash build #{self.id} started {self.s['started']} in {self.build_dir}")
         self.emit("== $ " + self.s["command"])
-        rc = self.run(["ninja"] + self.ninja_args, self.on_build_line)
+        rc = self.run(["/bin/bash", "-c", self.build_cmd], self.on_build_line)
         self.s["exitCode"] = rc
-        if not self.stopped and rc == 0 and os.environ.get("NINJA_DASH_NO_INSTALL") != "1":
-            self.s["phase"], self.s["step"] = "installing", "Installing (ninja install)"
+        if not self.stopped and rc == 0 and self.install_cmd and os.environ.get("NINJA_DASH_NO_INSTALL") != "1":
+            self.s["phase"], self.s["step"] = "installing", f"Installing ({self.install_cmd})"
             manifest = os.path.join(self.build_dir, "install_manifest.txt")
             try:
                 with open(manifest) as f:
@@ -233,8 +250,8 @@ class Dash:
             except OSError:
                 pass
             self.flush()
-            self.emit("== $ ninja install")
-            irc = self.run(["ninja", "install"], self.on_install_line)
+            self.emit("== $ " + self.install_cmd)
+            irc = self.run(["/bin/bash", "-c", self.install_cmd], self.on_install_line)
             self.s["installExitCode"] = irc
             if self.s["installTotal"] < self.s["installDone"]:
                 self.s["installTotal"] = self.s["installDone"]
@@ -257,14 +274,31 @@ class Dash:
         return 0 if self.s["phase"] == "completed" else 1
 
 
+def parse_args(rest):
+    """Returns (build_cmd, install_cmd) for both the new and the legacy calling conventions."""
+    if rest and rest[0] == "--":
+        args = " ".join(shlex.quote(a) for a in rest[1:])
+        return ("ninja " + args).strip(), "ninja install"
+    build_cmd, install_cmd = None, None
+    i = 0
+    while i < len(rest):
+        if rest[i] == "--build-cmd" and i + 1 < len(rest):
+            build_cmd = rest[i + 1]; i += 2
+        elif rest[i] == "--install-cmd" and i + 1 < len(rest):
+            install_cmd = rest[i + 1]; i += 2
+        else:
+            raise SystemExit(f"ninja-dash: unexpected argument {rest[i]!r}")
+    if not build_cmd:
+        raise SystemExit("ninja-dash: --build-cmd is required (or use the legacy '-- ninja args' form)")
+    return build_cmd, install_cmd or ""
+
+
 def main(argv):
     if len(argv) < 2 or argv[1] in ("-h", "--help"):
         print(__doc__)
         return 2
     build_dir = argv[1]
-    rest = argv[2:]
-    if rest and rest[0] == "--":
-        rest = rest[1:]
+    build_cmd, install_cmd = parse_args(argv[2:])
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):
         print(f"ninja-dash: no build.ninja in {build_dir} (run cmake -G Ninja first)", file=sys.stderr)
         return 2
@@ -272,7 +306,7 @@ def main(argv):
     if rb:
         print(f"ninja-dash: build #{rb['id']} is already running (pid {rb['pid']})", file=sys.stderr)
         return 3
-    return Dash(build_dir, rest).main()
+    return Dash(build_dir, build_cmd, install_cmd).main()
 
 
 if __name__ == "__main__":

@@ -213,3 +213,38 @@ public sealed class SetRoleRequest
 {
     public string Role { get; set; } = Roles.Operator;
 }
+
+// ---------------- Build directory selection (v1.2.0) ----------------
+
+public sealed class BuildSettings
+{
+    public string BuildDir { get; set; } = "";
+    public string DefaultBuildDir { get; set; } = "";
+    public bool Ready { get; set; }
+    public bool SourceFound { get; set; }
+    public string BuildCommand { get; set; } = "";
+    public string InstallCommand { get; set; } = "";
+}
+
+public sealed class DirEntry
+{
+    public string Name { get; set; } = "";
+    public string Path { get; set; } = "";
+    public bool HasBuildNinja { get; set; }
+    public bool HasCMakeLists { get; set; }
+}
+
+public sealed class DirListing
+{
+    public string Path { get; set; } = "";
+    public string? Parent { get; set; }
+    public bool HasBuildNinja { get; set; }
+    public bool ParentHasCMakeLists { get; set; }
+    public string? Error { get; set; }
+    public List<DirEntry> Entries { get; set; } = new();
+}
+
+public sealed class PathRequest
+{
+    public string Path { get; set; } = "";
+}

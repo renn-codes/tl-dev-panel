@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.1.0**
+**Version 1.2.0**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -61,9 +61,9 @@ cd /roc/claude/panel/server && sudo dotnet TeamLigma.Panel.Server.dll user-reset
 
 ## Commands the panel runs
 
-| Control | Command (cwd `/roc/claude/claude-acore/build`) |
+| Control | Command (cwd = the build directory, default `/roc/claude/claude-acore/build`) |
 |---|---|
-| Start Build | `screen -dmS build ninja-dash /roc/claude/claude-acore/build -- -j8 -k 0` (build, then `ninja install` on success) |
+| Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded |
 | Prepare (CMake) | `cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DWITH_WARNINGS=0 -DTOOLS_BUILD=all -DSCRIPTS=static -DMODULES=static` |
 | Clean | `ninja -t clean` |
 | Force Stop | Sends SIGTERM to ninja-dash, which stops ninja's process group and records the build as *Stopped* |
@@ -71,7 +71,21 @@ cd /roc/claude/panel/server && sudo dotnet TeamLigma.Panel.Server.dll user-reset
 | Authserver | `screen -dmS auth ./authserver` (cwd `/roc/claude/live/bin`) |
 | MySQL | `screen -dmS mysql mysql -uroot -p` |
 
-All of these are set in `src/TeamLigma.Panel.Server/appsettings.json` (`Panel` section).
+All of these are set in `src/TeamLigma.Panel.Server/appsettings.json` (`Panel` section). Start Build uses `BuildCommand` and `InstallCommand`.
+
+Start Build runs inside a detached `screen` session named `build`, through `ninja-dash`, so a build keeps going if the panel restarts. Before launching, the panel checks for the usual problems, and if the build still doesn't start it shows the reason in a notification and in the Build Console terminal:
+- the directory isn't prepared;
+- `screen`, `ninja-dash`, `ninja` or `python3` is missing;
+- `ninja-dash` has Windows line endings;
+- a `build` screen session is already open.
+
+## Build directory
+The **Build directory** row in the Build Console shows the folder that Start Build, Prepare and Clean run in, with a status:
+- **Ready:** it contains `build.ninja`.
+- **Needs Prepare:** it doesn't contain `build.ninja` yet.
+- **No source in parent:** the parent folder has no `CMakeLists.txt`.
+
+**Change…** opens a folder browser on the server. You can move up, type a path, open folders (folders containing `build.ninja` or `CMakeLists.txt` are tagged) and create a new folder. **Use this folder** saves the choice to `/roc/claude/panel-data/settings.json`; **Reset to default** returns to `Panel:BuildDir`. Prepare runs `cmake ../`, so pick a folder that sits directly inside the AzerothCore source tree. Operators and administrators can change it, but not while a build or task is running.
 
 The panel never force-kills `worldserver`, `authserver`, `mysql` or `mysqld`:
 - Worldserver: use `server shutdown 0h0m10s`, or the Shutdown button.
@@ -79,12 +93,13 @@ The panel never force-kills `worldserver`, `authserver`, `mysql` or `mysqld`:
 - MySQL: type `exit`.
 
 ## ninja-dash
-`tools/ninja-dash` is the build runner behind **Start Build**. It mirrors ninja output to the screen session and records each numbered build under `/roc/claude/panel-data/builds/<n>/`:
+`tools/ninja-dash` is the wrapper behind **Start Build**. It runs the build command and then the install command through bash, exactly as configured. It mirrors their output to the screen session and records each numbered build under `/roc/claude/panel-data/builds/<n>/`:
 - `status.json`: live phase, step counts, failed targets, result, and the objects currently compiling with elapsed and estimated times. Estimates come from earlier `.ninja_log` timings.
 - `build.log`: the complete build and install log.
 
 ```bash
-ninja-dash <build-dir> -- [ninja args]   # NINJA_DASH_HOME overrides /roc/claude/panel-data
+ninja-dash <build-dir> --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd 'ninja install'
+# NINJA_DASH_HOME overrides /roc/claude/panel-data
 ```
 
 ## Layout on disk
@@ -135,7 +150,9 @@ The panel can run server and SQL commands, so give Operator or Administrator onl
 Over plain HTTP, passwords and session cookies cross the network unencrypted. On anything other than a trusted LAN, put TLS in front of the panel (for example an nginx `listen 443 ssl` server block that proxies to this one). Once you do, the session cookie is marked Secure automatically.
 
 ## Troubleshooting
-- **"Build directory is not prepared":** run Prepare (CMake) first.
+- **"Build directory is not prepared":** run Prepare (CMake) first, or choose the right folder with **Change…**.
+- **"The build did not start: …":** the text after the colon is what `ninja-dash` or `screen` printed. The full output is in the Build Console terminal under *Start Build (failed)*.
+- **On a 1-CPU machine:** `$(( $(nproc) - 1 ))` is 0, and `ninja -j0` means unlimited parallel jobs. Set `BuildCommand` to `ninja -j1` there.
 - **A build shows *Interrupted*:** ninja-dash was killed without cleaning up. Start a new build.
 - **A server shows *Session open* but not *Running*:** the program exited inside its screen session. Read its console for the reason, then press Start again after the session closes.
 - **"That code is not valid" for every code:** the server's clock or your phone's clock is wrong. Authenticator codes need both to be within about 30 seconds of the real time.
