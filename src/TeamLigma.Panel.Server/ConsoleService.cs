@@ -10,23 +10,34 @@ namespace TeamLigma.Panel.Server;
 /// </summary>
 public sealed class ConsoleService
 {
-    public sealed record Component(string Name, string Title, string Exe, Func<PanelOptions, string> Command, string Cwd);
+    /// <summary>A console component. Paths and commands come from Settings, so they are evaluated each time.</summary>
+    public sealed record Component(string Name, string Title, Func<string> ExePath, Func<string> Command)
+    {
+        /// <summary>Process name as /proc/&lt;pid&gt;/comm shows it (truncated to 15 characters by the kernel).</summary>
+        public string Comm { get { var n = Path.GetFileName(ExePath()); return n.Length > 15 ? n[..15] : n; } }
+        /// <summary>Servers run from their own bin directory (AzerothCore resolves paths relative to it).</summary>
+        public string Cwd { get { var d = Path.GetDirectoryName(ExePath()); return d != null && Directory.Exists(d) ? d : "/"; } }
+    }
 
     readonly PanelOptions _o;
     readonly BuildService _builds;
+    readonly SettingsStore _settings;
+    readonly ILogger<ConsoleService> _log;
     public IReadOnlyDictionary<string, Component> Components { get; }
 
-    public ConsoleService(IOptions<PanelOptions> o, BuildService builds)
+    public ConsoleService(IOptions<PanelOptions> o, BuildService builds, SettingsStore settings, ILogger<ConsoleService> log)
     {
         _o = o.Value;
         _builds = builds;
+        _settings = settings;
+        _log = log;
         Directory.CreateDirectory(_o.ConsolesDir);
         Directory.CreateDirectory(_o.UploadsDir);
         Components = new Dictionary<string, Component>
         {
-            ["world"] = new("world", "Worldserver", "worldserver", x => x.WorldCommand, _o.BinDir),
-            ["auth"] = new("auth", "Authserver", "authserver", x => x.AuthCommand, _o.BinDir),
-            ["mysql"] = new("mysql", "MySQL", "mysql", x => x.MySqlCommand, _o.BinDir),
+            ["world"] = new("world", "Worldserver", () => _settings.Worldserver, _settings.WorldserverCommand),
+            ["auth"] = new("auth", "Authserver", () => _settings.Authserver, _settings.AuthserverCommand),
+            ["mysql"] = new("mysql", "MySQL", () => _settings.MySqlClient, _settings.MySqlCommand),
         };
     }
 
@@ -38,7 +49,7 @@ public sealed class ConsoleService
         var list = new List<ServerStatus>();
         foreach (var c in Components.Values)
         {
-            var pid = Shell.FindPid(c.Exe);
+            var pid = Shell.FindPid(c.Comm);
             var st = new ServerStatus
             {
                 Name = c.Name,
@@ -46,7 +57,9 @@ public sealed class ConsoleService
                 SessionActive = sessions.Contains(c.Name),
                 ProcessRunning = pid != null,
                 Pid = pid,
-                Command = c.Command(_o),
+                Command = c.Command(),
+                ShutdownCommand = c.Name == "world" ? _settings.ShutdownCommand() : null,
+                AutoLogin = c.Name == "mysql" && _settings.MySqlAutoLogin && _settings.MySqlPasswordSet,
             };
             if (st.SessionActive && TailEndsWith(LogFile(c.Name), "password:")) st.InputHint = "password";
             list.Add(st);
@@ -73,18 +86,44 @@ public sealed class ConsoleService
         if (!Components.TryGetValue(name, out var c)) return Fail("Unknown console.");
         var sessions = await Shell.ScreenSessionsAsync();
         if (sessions.Contains(name)) return Fail($"{c.Title} session is already running.");
-        if (name != "mysql" && !File.Exists(Path.Combine(_o.BinDir, c.Exe)))
-            return Fail($"{c.Exe} is not installed in {_o.BinDir}. Build and install the server first.");
-        if (name != "mysql" && Shell.FindPid(c.Exe) is { } pid)
-            return Fail($"{c.Exe} is already running outside the panel (pid {pid}).");
+        var exe = c.ExePath();
+        if (Shell.Resolve(exe, SettingsStore.SystemPath) == null)
+            return Fail(name == "mysql"
+                ? $"The MySQL client was not found ({exe}). Install it, or set its location in Settings."
+                : $"{exe} was not found or is not executable. Build and install the server, or set its location in Settings.");
+        if (name != "mysql" && Shell.FindPid(c.Comm) is { } pid)
+            return Fail($"{c.Comm} is already running outside the panel (pid {pid}).");
         var log = LogFile(name);
-        var header = $"\u001b[38;5;208m== Team Ligma panel: starting {c.Title} at {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}\u001b[0m\n== $ {c.Command(_o)}\n";
+        var command = c.Command();
+        var header = $"\u001b[38;5;208m== Team Ligma panel: starting {c.Title} at {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss}\u001b[0m\n== $ {command}\n";
         await File.AppendAllTextAsync(log, header);
         var env = _builds.Env(name);
         env["SCREENRC"] = _builds.ScreenRc(name, log);
-        var cwd = Directory.Exists(c.Cwd) ? c.Cwd : "/";
-        var (code, output) = await Shell.BashAsync(c.Command(_o), cwd, env);
-        return code == 0 ? Ok($"{c.Title} started.") : Fail($"Failed to start {c.Title} (exit {code}): {output}");
+        var (code, output) = await Shell.BashAsync(command, c.Cwd, env);
+        if (code != 0) return Fail($"Failed to start {c.Title} (exit {code}): {output}");
+        if (name == "mysql" && _settings.MySqlAutoLogin && _settings.MySqlPassword() is { } password)
+        {
+            _ = AutoLoginAsync(log, password);
+            return Ok("MySQL started; logging in automatically.");
+        }
+        return Ok($"{c.Title} started.");
+    }
+
+    /// <summary>Types the stored password when the client shows its "Enter password:" prompt.</summary>
+    async Task AutoLoginAsync(string log, string password)
+    {
+        for (var i = 0; i < 75; i++) // up to 15 s
+        {
+            await Task.Delay(200);
+            if (!(await Shell.ScreenSessionsAsync()).Contains("mysql")) return;
+            if (TailEndsWith(log, "password:"))
+            {
+                var ok = await Shell.ScreenTypeAsync("mysql", password, true, _o.ScreenDir);
+                _log.LogInformation("MySQL auto-login {Result}", ok ? "sent the stored password" : "could not type into the session");
+                return;
+            }
+        }
+        _log.LogWarning("MySQL auto-login: no password prompt appeared within 15 seconds");
     }
 
     public async Task<ActionResult> InputAsync(string name, string text)

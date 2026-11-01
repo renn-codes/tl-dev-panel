@@ -29,6 +29,9 @@ namespace TeamLigma.Panel.Services;
 [JsonSerializable(typeof(DirListing))]
 [JsonSerializable(typeof(PathRequest))]
 [JsonSerializable(typeof(JobsRequest))]
+[JsonSerializable(typeof(PanelSettingsDto))]
+[JsonSerializable(typeof(SettingsSaveResult))]
+[JsonSerializable(typeof(DetectedTools))]
 internal partial class PanelJson : JsonSerializerContext { }
 
 /// <summary>Thin client for the panel backend (same origin, proxied by nginx under /api).</summary>
@@ -159,6 +162,35 @@ public sealed class ApiClient
         => PostBody("api/build/jobs", new JobsRequest { Jobs = jobs }, PanelJson.Default.JobsRequest);
     public Task<ActionResult> MakeDirAsync(string path)
         => PostBody("api/fs/mkdir", new PathRequest { Path = path }, PanelJson.Default.PathRequest);
+
+    // ---- Settings (admin) ----
+    public Task<PanelSettingsDto?> SettingsAsync() => Get("api/settings", PanelJson.Default.PanelSettingsDto);
+
+    public async Task<SettingsSaveResult> SaveSettingsAsync(PanelSettingsDto s)
+    {
+        try
+        {
+            using var resp = await _http.PutAsync("api/settings", JsonContent.Create(s, PanelJson.Default.PanelSettingsDto));
+            Check(resp);
+            if (!resp.IsSuccessStatusCode) return new SettingsSaveResult { Message = $"Server returned {(int)resp.StatusCode} {resp.ReasonPhrase}" };
+            return await resp.Content.ReadFromJsonAsync(PanelJson.Default.SettingsSaveResult) ?? new SettingsSaveResult { Message = "Empty response" };
+        }
+        catch (Exception ex) { Connected = false; return new SettingsSaveResult { Message = "Panel service unreachable: " + ex.Message }; }
+    }
+
+    public async Task<DetectedTools?> DetectToolsAsync()
+    {
+        try
+        {
+            using var resp = await _http.PostAsync("api/settings/detect", null);
+            Check(resp);
+            return resp.IsSuccessStatusCode ? await resp.Content.ReadFromJsonAsync(PanelJson.Default.DetectedTools) : null;
+        }
+        catch { Connected = false; return null; }
+    }
+
+    public Task<ActionResult> TestMySqlAsync(PanelSettingsDto s)
+        => PostBody("api/settings/mysql/test", s, PanelJson.Default.PanelSettingsDto);
 
     // ---- Authentication & accounts ----
     public Task<AuthState?> AuthStateAsync() => Get("api/auth/state", PanelJson.Default.AuthState);

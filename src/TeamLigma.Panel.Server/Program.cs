@@ -16,6 +16,8 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddSingleton<UserStore>();
 builder.Services.AddSingleton<AuthService>();
+builder.Services.AddSingleton<SettingsStore>();
+builder.Services.AddSingleton<SettingsApi>();
 builder.Services.AddSingleton<BuildService>();
 builder.Services.AddSingleton<ConsoleService>();
 builder.Services.AddSingleton<SystemMonitor>();
@@ -121,6 +123,23 @@ users.MapDelete("/{name}", (HttpContext ctx, string name, AuthService a) => a.De
 users.MapPost("/{name}/role", (HttpContext ctx, string name, SetRoleRequest r, AuthService a) => a.SetRole(ctx, Admin(ctx), name, r.Role));
 users.MapPost("/{name}/password", (HttpContext ctx, string name, LoginRequest r, AuthService a) => a.AdminResetPassword(ctx, Admin(ctx), name, r.Password));
 users.MapPost("/{name}/reset-totp", (HttpContext ctx, string name, AuthService a) => a.AdminResetTotp(ctx, Admin(ctx), name));
+var settings = api.MapGroup("/settings").RequireAuthorization("admin");
+settings.MapGet("", (SettingsApi s) => s.GetAsync());
+settings.MapPut("", async (HttpContext ctx, PanelSettingsDto r, SettingsApi s, AuthService a) =>
+{
+    var result = await s.SaveAsync(r);
+    a.Audit(ctx, Admin(ctx), result.Ok
+        ? "settings saved" + (r.MySqlClearPassword ? " (MySQL password removed)" : r.MySqlNewPassword is { Length: > 0 } ? " (MySQL password changed)" : "")
+        : $"settings save refused: {result.Message}");
+    return result;
+});
+settings.MapPost("/detect", (SettingsApi s) => s.Detect());
+settings.MapPost("/mysql/test", async (HttpContext ctx, PanelSettingsDto r, SettingsApi s, AuthService a) =>
+{
+    var result = await s.TestMySqlAsync(r);
+    a.Audit(ctx, Admin(ctx), "tested MySQL login: " + (result.Ok ? "ok" : "failed"));
+    return result;
+});
 users.MapPost("/{name}/unlock", (HttpContext ctx, string name, AuthService a) => a.Unlock(ctx, Admin(ctx), name));
 
 // ---- Panel (any signed-in user may read; operators/admins may act) ----

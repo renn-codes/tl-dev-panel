@@ -28,6 +28,7 @@ public sealed partial class Shell : UserControl
         AddNav("Server Monitor", ServersPage);
         AddNav("My Account", AccountPage);
         if (Session.IsAdmin) AddNav("Users", UsersPage);
+        if (Session.IsAdmin) AddNav("Settings", SettingsPage);
         UserNameText.Text = Session.User?.Username ?? "";
         UserRoleText.Text = Session.RoleLabel(Session.User?.Role) + (Session.User?.TotpEnabled == true ? " · 2FA" : "");
         Select(0);

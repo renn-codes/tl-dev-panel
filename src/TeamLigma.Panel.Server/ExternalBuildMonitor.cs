@@ -45,8 +45,13 @@ public sealed class ExternalBuildMonitor : BackgroundService
         public string LogPath = "", StatusPath = "";
     }
 
-    public ExternalBuildMonitor(BuildService builds, ILogger<ExternalBuildMonitor> log, IOptions<PanelOptions> o)
+    static SettingsStore? _settings;
+    static string NinjaExe => _settings?.Ninja ?? "ninja";
+    int _ticks;
+
+    public ExternalBuildMonitor(BuildService builds, ILogger<ExternalBuildMonitor> log, IOptions<PanelOptions> o, SettingsStore settings)
     {
+        _settings = settings;
         _builds = builds;
         _log = log;
         _tmp = Path.Combine(o.Value.DataHome, "tmp");
@@ -58,7 +63,11 @@ public sealed class ExternalBuildMonitor : BackgroundService
         try { Readopt(); } catch (Exception ex) { _log.LogWarning(ex, "Could not re-adopt external builds"); }
         while (!ct.IsCancellationRequested)
         {
-            try { await Tick(); }
+            try
+            {
+                await Tick();
+                if (++_ticks % 30 == 0) _builds.Prune(); // History retention, about once a minute
+            }
             catch (Exception ex) { _log.LogWarning(ex, "External build scan failed"); }
             await Task.Delay(2000, ct).ContinueWith(_ => { });
         }
@@ -284,9 +293,9 @@ public sealed class ExternalBuildMonitor : BackgroundService
             Directory.CreateDirectory(work);
             if (hasDeps) File.Copy(deps, Path.Combine(work, "deps"), true);
             File.Copy(log, Path.Combine(work, "log"), true);
-            var script = "mount --bind \"$3\" \"$4\" || exit 97; if [ -n \"$1\" ]; then mount --bind \"$1\" \"$2\" || exit 97; fi; shift 4; exec ninja -n \"$@\"";
+            var script = "mount --bind \"$3\" \"$4\" || exit 97; if [ -n \"$1\" ]; then mount --bind \"$1\" \"$2\" || exit 97; fi; shift 4; exec \"$@\"";
             var args = new List<string> { "-m", "--propagation", "private", "/bin/bash", "-c", script, "dryrun",
-                hasDeps ? Path.Combine(work, "deps") : "", deps, Path.Combine(work, "log"), log, "-C", o.Dir };
+                hasDeps ? Path.Combine(work, "deps") : "", deps, Path.Combine(work, "log"), log, NinjaExe, "-n", "-C", o.Dir };
             args.AddRange(o.Targets);
             var (code, output) = await Shell.RunAsync("unshare", args, o.Dir,
                 new Dictionary<string, string> { ["NINJA_STATUS"] = "[%f/%t] " }, timeoutMs: 60000);
@@ -363,7 +372,7 @@ public sealed class ExternalBuildMonitor : BackgroundService
     {
         var args = new List<string> { "-C", dir, "-t", "commands" };
         args.AddRange(targets);
-        var (code, output) = await Shell.RunAsync("ninja", args, dir, timeoutMs: 60000);
+        var (code, output) = await Shell.RunAsync(NinjaExe, args, dir, timeoutMs: 60000);
         return code == 0 ? output.Split('\n').Count(l => l.Trim().Length > 0) : 0;
     }
 
@@ -376,7 +385,7 @@ public sealed class ExternalBuildMonitor : BackgroundService
     {
         var args = new List<string> { "-C", dir, "-n", "-d", "explain" };
         args.AddRange(targets);
-        var (code, output) = await Shell.RunAsync("ninja", args, dir, timeoutMs: 120000);
+        var (code, output) = await Shell.RunAsync(NinjaExe, args, dir, timeoutMs: 120000);
         if (code != 0) return -1;
         var phony = new HashSet<string>();
         var dirty = new HashSet<string>();

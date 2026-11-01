@@ -17,53 +17,41 @@ public sealed class BuildService
     string? _taskLog;
     int _taskSeq;
     DateTimeOffset _lastTaskStart = DateTimeOffset.MinValue;
-    string? _buildDirOverride;
-    int? _jobs;
-    string SettingsPath => Path.Combine(_o.DataHome, "settings.json");
+    readonly SettingsStore _settings;
+    int? _jobs => _settings.Jobs;
 
-    /// <summary>The active build directory: the one chosen in the panel, else Panel:BuildDir from appsettings.</summary>
-    public string BuildDir => _buildDirOverride ?? _o.BuildDir;
+    /// <summary>The active build directory: the one chosen in the Build Console, else the default from Settings.</summary>
+    public string BuildDir => _settings.BuildDir;
 
     /// <summary>Fills a configured command for the active build directory.
     /// Accepts the {BuildDir} placeholder, and also rewrites the default path in older configs.</summary>
     public string Cmd(string template) => template.Replace(_o.BuildDir, "{BuildDir}").Replace("{BuildDir}", BuildDir);
 
-    public BuildService(IOptions<PanelOptions> o, ILogger<BuildService> log)
+    public BuildService(IOptions<PanelOptions> o, ILogger<BuildService> log, SettingsStore settings)
     {
         _o = o.Value;
         _log = log;
+        _settings = settings;
         Directory.CreateDirectory(_o.BuildsDir);
         Directory.CreateDirectory(_o.TasksDir);
         Directory.CreateDirectory(_o.ScreenDir);
         _taskSeq = Directory.GetFiles(_o.TasksDir, "*.log").Length;
-        try
-        {
-            if (File.Exists(SettingsPath))
-            {
-                var root = JsonDocument.Parse(File.ReadAllText(SettingsPath)).RootElement;
-                if (root.TryGetProperty("buildDir", out var bd) && bd.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(bd.GetString()))
-                    _buildDirOverride = bd.GetString();
-                if (root.TryGetProperty("jobs", out var j) && j.ValueKind == JsonValueKind.Number) _jobs = j.GetInt32();
-            }
-        }
-        catch (Exception ex) { _log.LogWarning(ex, "Ignoring unreadable {Path}", SettingsPath); }
     }
 
     public BuildSettings Settings() => new()
     {
         BuildDir = BuildDir,
-        DefaultBuildDir = _o.BuildDir,
+        DefaultBuildDir = _settings.DefaultBuildDir,
         Ready = File.Exists(Path.Combine(BuildDir, "build.ninja")),
         SourceFound = File.Exists(Path.Combine(Path.GetDirectoryName(BuildDir.TrimEnd('/')) ?? "/", "CMakeLists.txt")),
         BuildCommand = _o.BuildCommand,
-        InstallCommand = _o.InstallCommand,
+        InstallCommand = _settings.NinjaCommand(Cmd(_o.InstallCommand)),
         Jobs = _jobs,
         EffectiveJobs = EffectiveJobs(CpuTopology.Detect()),
         EffectiveBuildCommand = EffectiveBuildCommand(),
         Cpu = CpuTopology.Detect(),
     };
 
-    void SaveSettings() => File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new { buildDir = _buildDirOverride, jobs = _jobs }, Json));
 
     // Matches the -j argument of the build command: "-j$(( ... ))", "-j 8" or "-j8".
     static readonly System.Text.RegularExpressions.Regex JobsArg =
@@ -78,6 +66,7 @@ public sealed class BuildService
     {
         var cmd = Cmd(_o.BuildCommand);
         if (cmd.Contains("ninja-dash")) return cmd; // legacy launch line, used verbatim
+        cmd = _settings.NinjaCommand(cmd);
         var cpu = CpuTopology.Detect();
         if (_jobs == null && cpu.LogicalCpus > 1) return cmd;
         var jobs = EffectiveJobs(cpu);
@@ -89,8 +78,7 @@ public sealed class BuildService
         var cpu = CpuTopology.Detect();
         if (jobs is { } j && (j < cpu.MinJobs || j > cpu.MaxJobs))
             return Fail($"Choose between {cpu.MinJobs} and {cpu.MaxJobs} threads (this host has {cpu.LogicalCpus} logical CPUs).");
-        _jobs = jobs;
-        SaveSettings();
+        _settings.Update(s => s.Jobs = jobs);
         if (jobs == null) return Ok($"CPU threads set to automatic ({EffectiveJobs(cpu)}).");
         var warn = jobs > cpu.MemorySafeJobs ? $" Warning: {jobs} jobs may exceed RAM ({cpu.MemTotal / 1024 / 1024 / 1024} GB; about {cpu.MemorySafeJobs} is safe)." : "";
         return Ok($"CPU threads set to {jobs}.{warn}");
@@ -105,8 +93,8 @@ public sealed class BuildService
     {
         var build = EffectiveBuildCommand();
         if (build.Contains("ninja-dash")) return build;
-        return $"screen -dmS {SessionFor(BuildDir)} ninja-dash {Quote(BuildDir)} --build-cmd {Quote(build)}" +
-               (string.IsNullOrWhiteSpace(_o.InstallCommand) ? "" : $" --install-cmd {Quote(Cmd(_o.InstallCommand))}");
+        return $"{SettingsStore.Q(_settings.Screen)} -dmS {SessionFor(BuildDir)} ninja-dash {Quote(BuildDir)} --build-cmd {Quote(build)}" +
+               (string.IsNullOrWhiteSpace(_o.InstallCommand) ? "" : $" --install-cmd {Quote(_settings.NinjaCommand(Cmd(_o.InstallCommand)))}");
     }
 
     public ActionResult SetBuildDir(string path)
@@ -116,8 +104,8 @@ public sealed class BuildService
         if (full.Length == 0) full = "/";
         if (!Directory.Exists(full)) return Fail($"{full} does not exist.");
         if (TaskRunning) return Fail($"Wait for '{Task.Name}' to finish first.");
-        _buildDirOverride = full == _o.BuildDir.TrimEnd('/') ? null : full;
-        SaveSettings();
+        var isDefault = full == _settings.DefaultBuildDir.TrimEnd('/');
+        _settings.Update(s => s.BuildDir = isDefault ? null : full);
         var s = Settings();
         var note = s.Ready ? "Ready to build." : s.SourceFound ? "Run Prepare (CMake) before building." : "Warning: no CMakeLists.txt in the parent folder, so Prepare ('cmake ../') will not find the source.";
         return Ok($"Build directory set to {full}. {note}");
@@ -207,6 +195,11 @@ public sealed class BuildService
 
     public BuildStatus? Current() => Running() ?? All().FirstOrDefault();
 
+    /// <summary>Panel:BuildDir from appsettings (the fallback when Settings has no default build directory).</summary>
+    public string DefaultBuildDirFromConfig => _o.BuildDir;
+
+    public string CleanCommand() => _settings.NinjaCommand(Cmd(_o.CleanCommand));
+
     /// <summary>Screen session name for a panel build in a directory, so builds in different directories don't collide.</summary>
     public static string SessionFor(string dir)
         => "build-" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(Normalize(dir))))[..8].ToLowerInvariant();
@@ -239,6 +232,20 @@ public sealed class BuildService
 
     public string BuildDirOf(int id) => Path.Combine(_o.BuildsDir, id.ToString());
 
+    /// <summary>Applies the History retention setting: keeps the newest N finished builds (0 = keep all).</summary>
+    public int Prune()
+    {
+        var keep = _settings.HistoryRetention;
+        if (keep <= 0) return 0;
+        var removed = 0;
+        foreach (var b in All().Where(b => !IsActive(b)).Skip(keep))
+        {
+            try { Directory.Delete(BuildDirOf(b.Id), true); removed++; } catch { }
+        }
+        if (removed > 0) _log.LogInformation("History retention: removed {Count} old build record(s)", removed);
+        return removed;
+    }
+
     public string LogPath(int id) => Path.Combine(_o.BuildsDir, id.ToString(), "build.log");
 
     public TaskState Task
@@ -261,10 +268,11 @@ public sealed class BuildService
         // Preflight: everything the screen session needs must be resolvable, or it dies silently.
         var session = SessionFor(BuildDir);
         var env = Env(session);
-        foreach (var tool in new[] { "screen", "ninja-dash", "ninja", "python3" })
-            if (Shell.Which(tool, env["PATH"]) == null)
-                return Fail($"'{tool}' was not found on the panel's PATH ({env["PATH"]}). " +
-                            (tool == "ninja-dash" ? "Re-run deploy/install.sh to install it to /usr/local/bin." : "Install it on the server."));
+        foreach (var (tool, path) in new[] { ("screen", _settings.Screen), ("ninja-dash", "ninja-dash"), ("ninja", _settings.Ninja), ("python3", "python3") })
+            if (Shell.Resolve(path, env["PATH"]) == null)
+                return Fail($"'{tool}' was not found ({path}). " +
+                            (tool == "ninja-dash" ? "Re-run deploy/install.sh to install it to /usr/local/bin."
+                             : tool is "screen" or "ninja" ? "Install it, or set its location in Settings." : "Install it on the server."));
         var nd = Shell.Which("ninja-dash", env["PATH"])!;
         try
         {
@@ -346,7 +354,7 @@ public sealed class BuildService
         for (var i = 0; i < 50 && Shell.IsNinjaDash(r.Pid); i++) await System.Threading.Tasks.Task.Delay(200);
         var session = r.BuildDir != null ? SessionFor(r.BuildDir) : "build";
         var sessions = await Shell.ScreenSessionsAsync();
-        if (sessions.Contains(session)) await Shell.RunAsync("screen", new[] { "-S", session, "-X", "quit" });
+        if (sessions.Contains(session)) await Shell.RunAsync(Shell.ScreenExe, new[] { "-S", session, "-X", "quit" });
         return Ok($"Build #{r.Id} stopped.");
     }
 
@@ -362,14 +370,14 @@ public sealed class BuildService
     public ActionResult Configure()
     {
         Directory.CreateDirectory(BuildDir);
-        return StartTask("Prepare (CMake)", Cmd(_o.ConfigureCommand));
+        return StartTask("Prepare (CMake)", _settings.ConfigureCommand());
     }
 
     public ActionResult Clean()
     {
         if (!File.Exists(Path.Combine(BuildDir, "build.ninja")))
             return Fail("Nothing to clean: the build directory has not been prepared.");
-        return StartTask("Clean (ninja -t clean)", Cmd(_o.CleanCommand));
+        return StartTask("Clean (ninja -t clean)", CleanCommand());
     }
 
     ActionResult StartTask(string name, string command)

@@ -79,6 +79,7 @@
       <v:ServersView x:Name="ServersPage" Visibility="Collapsed" />
       <v:AccountView x:Name="AccountPage" Visibility="Collapsed" />
       <v:UsersView x:Name="UsersPage" Visibility="Collapsed" />
+      <v:SettingsView x:Name="SettingsPage" Visibility="Collapsed" />
       <!-- toast -->
       <Border x:Name="Toast" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24"
               MaxWidth="520" CornerRadius="8" Padding="16,10" Background="#3A3935" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="1">

@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.5.0**
+**Version 1.6.0**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -12,6 +12,24 @@ The panel has two parts:
 nginx serves both on port **26767**.
 
 ---
+
+## Settings
+Administrators get a **Settings** page. Leave a field empty to use the default shown in grey. Changes apply to the next build, task or server start, and every save is recorded in the audit log.
+
+| Section | Settings |
+|---|---|
+| **Build** | Default build directory; install directory (becomes `-DCMAKE_INSTALL_PREFIX`); extra CMake options appended to Prepare; how many finished builds History keeps (older records and logs are removed automatically). |
+| **Build tools** | Paths to CMake, Ninja, the C and C++ compilers (become `-DCMAKE_C_COMPILER` / `-DCMAKE_CXX_COMPILER`) and GNU screen. Each shows whether it was found and its version. **Detect from PATH** fills them in. |
+| **Server executables** | Worldserver, Authserver and MySQL client executables (the server defaults are `<install dir>/bin/…`); optional Worldserver/Authserver config files (passed as `-c`); the Worldserver shutdown delay used by the Shutdown button. |
+| **MySQL login** | Host (empty = local socket), port, user, password, default database, and **auto-login**. With auto-login on, the panel types the saved password at the client's `Enter password:` prompt, so the MySQL console opens logged in. **Test connection** checks the login. |
+| **Preview** | The exact commands the panel will run with the saved settings. |
+
+How the MySQL password is protected:
+- it's encrypted on the server with ASP.NET Core data protection, in `settings.json` (mode 600);
+- it's never sent back to the browser or written to any log;
+- it's never placed on a command line: the console uses `mysql -p` and types it at the prompt, and Test connection passes it in the client's environment.
+
+Console input is pasted through a temporary owner-only file that's deleted immediately afterwards.
 
 ## Loading screen
 While the WebAssembly app downloads and starts, the panel shows a dark, fantasy-MMO-styled loading screen:
@@ -72,6 +90,8 @@ cd /roc/claude/panel/server && sudo dotnet TeamLigma.Panel.Server.dll user-reset
 
 ## Commands the panel runs
 
+These are the defaults; **Settings** can change the tool paths, the install directory, the executables and the MySQL login, and its preview shows the commands actually used.
+
 | Control | Command (cwd = the build directory, default `/roc/claude/claude-acore/build`) |
 |---|---|
 | Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded. A thread count chosen under **CPU threads** replaces the `-j` value. |
@@ -80,7 +100,7 @@ cd /roc/claude/panel/server && sudo dotnet TeamLigma.Panel.Server.dll user-reset
 | Force Stop | Sends SIGTERM to ninja-dash, which stops ninja's process group and records the build as *Stopped* |
 | Worldserver | `screen -dmS world ./worldserver` (cwd `/roc/claude/live/bin`) |
 | Authserver | `screen -dmS auth ./authserver` (cwd `/roc/claude/live/bin`) |
-| MySQL | `screen -dmS mysql mysql -uroot -p` |
+| MySQL | `screen -dmS mysql mysql -u root -p` (plus `-h`/`-P`/database from Settings) |
 
 All of these are set in `src/TeamLigma.Panel.Server/appsettings.json` (`Panel` section). Start Build uses `BuildCommand` and `InstallCommand`.
 

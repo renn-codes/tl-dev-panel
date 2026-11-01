@@ -88,6 +88,10 @@ public sealed class ServerStatus
     /// <summary>"password" when the console is waiting for a hidden password.</summary>
     public string? InputHint { get; set; }
     public string Command { get; set; } = "";
+    /// <summary>Worldserver only: the graceful shutdown command for the Shutdown button.</summary>
+    public string? ShutdownCommand { get; set; }
+    /// <summary>MySQL only: the panel will type the stored password at the prompt.</summary>
+    public bool AutoLogin { get; set; }
 }
 
 public sealed class LogChunk
@@ -294,4 +298,77 @@ public static class BuildSources
     public const string Panel = "panel";
     /// <summary>A ninja process started outside the panel, detected and observed by it.</summary>
     public const string External = "external";
+}
+
+// ---------------- Settings (v1.6.0) ----------------
+
+public sealed class ToolStatus
+{
+    public string Key { get; set; } = "";
+    public string Label { get; set; } = "";
+    public string Path { get; set; } = "";
+    public bool Found { get; set; }
+    public string? Version { get; set; }
+}
+
+public sealed class CommandPreview
+{
+    public string Label { get; set; } = "";
+    public string Command { get; set; } = "";
+}
+
+/// <summary>Panel settings. Null/empty string fields mean "use the default" (see Defaults).</summary>
+public sealed class PanelSettingsDto
+{
+    // Build
+    public string? DefaultBuildDir { get; set; }
+    public string? InstallDir { get; set; }
+    public string? ExtraCMakeArgs { get; set; }
+    public int? HistoryRetention { get; set; }
+
+    // Build tools
+    public string? CMakePath { get; set; }
+    public string? NinjaPath { get; set; }
+    public string? CCompilerPath { get; set; }
+    public string? CxxCompilerPath { get; set; }
+    public string? ScreenPath { get; set; }
+
+    // Servers
+    public string? WorldserverPath { get; set; }
+    public string? AuthserverPath { get; set; }
+    public string? MySqlClientPath { get; set; }
+    public string? WorldserverConfig { get; set; }
+    public string? AuthserverConfig { get; set; }
+    public int? ShutdownDelaySeconds { get; set; }
+
+    // MySQL login
+    public string? MySqlHost { get; set; }
+    public int? MySqlPort { get; set; }
+    public string? MySqlUser { get; set; }
+    public string? MySqlDatabase { get; set; }
+    public bool MySqlAutoLogin { get; set; }
+    /// <summary>Response only: whether a password is stored (it is never sent to the browser).</summary>
+    public bool MySqlPasswordSet { get; set; }
+    /// <summary>Request only: a new password; null leaves the stored one unchanged.</summary>
+    public string? MySqlNewPassword { get; set; }
+    /// <summary>Request only: remove the stored password.</summary>
+    public bool MySqlClearPassword { get; set; }
+
+    // Response only
+    public Dictionary<string, string> Defaults { get; set; } = new();
+    public List<ToolStatus> Tools { get; set; } = new();
+    public List<CommandPreview> Preview { get; set; } = new();
+}
+
+public sealed class SettingsSaveResult
+{
+    public bool Ok { get; set; }
+    public string Message { get; set; } = "";
+    public List<string> Warnings { get; set; } = new();
+    public PanelSettingsDto? Settings { get; set; }
+}
+
+public sealed class DetectedTools
+{
+    public Dictionary<string, string> Paths { get; set; } = new();
 }

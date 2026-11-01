@@ -6,6 +6,9 @@ namespace TeamLigma.Panel.Server;
 /// <summary>Small helpers for running processes and talking to GNU screen.</summary>
 public static class Shell
 {
+    /// <summary>The screen executable (set from the panel's settings).</summary>
+    public static string ScreenExe { get; set; } = "screen";
+
     public static async Task<(int Code, string Output)> RunAsync(string file, IEnumerable<string> args,
         string? cwd = null, IDictionary<string, string>? env = null, int timeoutMs = 15000)
     {
@@ -33,7 +36,7 @@ public static class Shell
 
     public static async Task<HashSet<string>> ScreenSessionsAsync()
     {
-        var (_, output) = await RunAsync("screen", new[] { "-ls" });
+        var (_, output) = await RunAsync(ScreenExe, new[] { "-ls" });
         var set = new HashSet<string>();
         foreach (var line in output.Split('\n'))
         {
@@ -56,23 +59,30 @@ public static class Shell
         if (text.Length > 0)
         {
             Directory.CreateDirectory(scratchDir);
-            var buf = Path.Combine(scratchDir, $"{session}.paste");
+            // Random name, owner-only, deleted after pasting: the text may be a password.
+            var buf = Path.Combine(scratchDir, $"{session}-{Guid.NewGuid():N}.paste");
+            await File.WriteAllTextAsync(buf, "", new UTF8Encoding(false));
+            File.SetUnixFileMode(buf, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             await File.WriteAllTextAsync(buf, text, new UTF8Encoding(false));
-            var r1 = await RunAsync("screen", new[] { "-S", session, "-p", "0", "-X", "readbuf", buf });
-            if (r1.Code != 0) return false;
-            var r2 = await RunAsync("screen", new[] { "-S", session, "-p", "0", "-X", "paste", "." });
-            if (r2.Code != 0) return false;
+            try
+            {
+                var r1 = await RunAsync(ScreenExe, new[] { "-S", session, "-p", "0", "-X", "readbuf", buf });
+                if (r1.Code != 0) return false;
+                var r2 = await RunAsync(ScreenExe, new[] { "-S", session, "-p", "0", "-X", "paste", "." });
+                if (r2.Code != 0) return false;
+            }
+            finally { try { File.Delete(buf); } catch { } }
         }
         if (enter)
         {
-            var r3 = await RunAsync("screen", new[] { "-S", session, "-p", "0", "-X", "stuff", "\r" });
+            var r3 = await RunAsync(ScreenExe, new[] { "-S", session, "-p", "0", "-X", "stuff", "\r" });
             return r3.Code == 0;
         }
         return true;
     }
 
     public static async Task<bool> ScreenStuffRawAsync(string session, string raw)
-        => (await RunAsync("screen", new[] { "-S", session, "-p", "0", "-X", "stuff", raw })).Code == 0;
+        => (await RunAsync(ScreenExe, new[] { "-S", session, "-p", "0", "-X", "stuff", raw })).Code == 0;
 
     public static int? FindPid(string exeName)
     {
@@ -103,6 +113,15 @@ public static class Shell
     {
         if (!PidAlive(pid)) return false;
         try { return File.ReadAllText($"/proc/{pid}/comm").Trim() == comm; } catch { return false; }
+    }
+
+    /// <summary>An absolute executable path if it exists and is executable; otherwise a PATH lookup.</summary>
+    public static string? Resolve(string pathOrName, string path)
+    {
+        if (System.IO.Path.IsPathRooted(pathOrName))
+            return File.Exists(pathOrName) && (File.GetUnixFileMode(pathOrName) & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0
+                ? pathOrName : null;
+        return Which(pathOrName, path);
     }
 
     /// <summary>Resolves an executable on a PATH string, like `command -v`.</summary>

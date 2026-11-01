@@ -17,6 +17,7 @@ public sealed partial class ConsolePanel : UserControl
     readonly List<string> _history = new();
     int _historyIndex;
     ServerStatus? _status;
+    string _shutdownCommand = "server shutdown 0h0m10s";
 
     public string Component { get; set; } = "";
     public string Title { get => TitleText.Text; set => TitleText.Text = value; }
@@ -64,8 +65,17 @@ public sealed partial class ConsolePanel : UserControl
         Input.IsEnabled = Password.IsEnabled = CtrlCBox.IsEnabled = can;
         if (!can) Input.PlaceholderText = "Read-only: your role cannot send commands";
         SqlButton.IsEnabled = can && running && s.InputHint != "password";
+        if (s.ShutdownCommand != null)
+        {
+            var delay = System.Text.RegularExpressions.Regex.Match(s.ShutdownCommand, @"(\d+)h(\d+)m(\d+)s");
+            var secs = delay.Success ? int.Parse(delay.Groups[1].Value) * 3600 + int.Parse(delay.Groups[2].Value) * 60 + int.Parse(delay.Groups[3].Value) : 10;
+            ExtraButton.Content = $"Shutdown ({(secs >= 60 ? $"{secs / 60}m{(secs % 60 > 0 ? $"{secs % 60}s" : "")}" : $"{secs}s")})";
+            ToolTipService.SetToolTip(ExtraButton, "Sends: " + s.ShutdownCommand);
+            _shutdownCommand = s.ShutdownCommand;
+        }
         if (_mode == ConsoleMode.MySql)
         {
+            Password.PlaceholderText = s.AutoLogin ? "Auto-login is on (password saved in Settings)" : "MySQL password, then Enter";
             var pw = s.InputHint == "password";
             if (pw && Password.Visibility != Visibility.Visible) { Password.Visibility = Visibility.Visible; Input.Visibility = Visibility.Collapsed; }
             else if (!pw && Password.Visibility == Visibility.Visible) { Password.Visibility = Visibility.Collapsed; Input.Visibility = Visibility.Visible; }
@@ -112,13 +122,13 @@ public sealed partial class ConsolePanel : UserControl
         {
             XamlRoot = XamlRoot,
             Title = "Shut down the Worldserver?",
-            Content = "Sends 'server shutdown 0h0m10s'. Connected players get a 10 second warning.",
+            Content = $"Sends '{_shutdownCommand}'. Connected players are warned before it goes down.",
             PrimaryButtonText = "Shut down",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
         };
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
-        Shell.Notify(await ApiClient.Instance.SendInputAsync(Component, "server shutdown 0h0m10s"));
+        Shell.Notify(await ApiClient.Instance.SendInputAsync(Component, _shutdownCommand));
     }
 
     async void OnSend(object sender, RoutedEventArgs e)
