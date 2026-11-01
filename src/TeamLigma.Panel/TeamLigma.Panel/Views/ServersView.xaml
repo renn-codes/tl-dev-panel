@@ -1,0 +1,30 @@
+<UserControl x:Class="TeamLigma.Panel.Views.ServersView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:TeamLigma.Panel.Views">
+  <Grid Padding="28,24,28,24" RowSpacing="16">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+    <StackPanel Spacing="2">
+      <TextBlock Style="{StaticResource TlPageTitle}" Text="Server Monitor" />
+      <TextBlock Foreground="{StaticResource TlTextMuted}" Text="Live consoles for the test realm. Servers run from /roc/claude/live/bin inside detached screen sessions." />
+    </StackPanel>
+    <Grid Grid.Row="1" ColumnSpacing="16">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+      <v:ConsolePanel x:Name="World" Component="world" Title="Worldserver" />
+      <Grid Grid.Column="1" RowSpacing="16">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="*" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <v:ConsolePanel x:Name="Auth" Component="auth" Title="Authserver" />
+        <v:ConsolePanel x:Name="MySql" Grid.Row="1" Component="mysql" Title="MySQL" />
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

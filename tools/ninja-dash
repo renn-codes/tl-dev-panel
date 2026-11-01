@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""ninja-dash - Team Ligma build runner.
+
+Usage: ninja-dash BUILD_DIR -- [ninja args...]
+
+Runs `ninja` (then `ninja install` on success) inside BUILD_DIR, mirroring all
+output to the terminal while recording a numbered build record that the
+Team Ligma Development Panel reads:
+
+    $NINJA_DASH_HOME/builds/<n>/status.json   live machine-readable status
+    $NINJA_DASH_HOME/builds/<n>/build.log     full build + install log
+
+NINJA_DASH_HOME defaults to /roc/claude/panel-data.
+Set NINJA_DASH_NO_INSTALL=1 to skip the install step.
+"""
+import json, os, re, signal, subprocess, sys, threading, time
+from datetime import datetime, timezone
+
+HOME = os.environ.get("NINJA_DASH_HOME", "/roc/claude/panel-data")
+BUILDS = os.path.join(HOME, "builds")
+STATUS_RE = re.compile(r"^\[(\d+)/(\d+)\]\s*(.*)$")
+
+
+def now_iso():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def pid_alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, TypeError):
+        return False
+
+
+def running_build():
+    if not os.path.isdir(BUILDS):
+        return None
+    for d in os.listdir(BUILDS):
+        p = os.path.join(BUILDS, d, "status.json")
+        try:
+            with open(p) as f:
+                s = json.load(f)
+        except Exception:
+            continue
+        if s.get("phase") in ("building", "installing") and pid_alive(s.get("pid")):
+            return s
+    return None
+
+
+def next_id():
+    os.makedirs(BUILDS, exist_ok=True)
+    counter = os.path.join(HOME, "build-counter")
+    n = 0
+    try:
+        with open(counter) as f:
+            n = int(f.read().strip() or 0)
+    except Exception:
+        pass
+    for d in os.listdir(BUILDS):
+        if d.isdigit():
+            n = max(n, int(d))
+    n += 1
+    with open(counter, "w") as f:
+        f.write(str(n))
+    return n
+
+
+def load_durations(build_dir):
+    """Previous per-output compile durations (ms) from .ninja_log."""
+    dur = {}
+    try:
+        with open(os.path.join(build_dir, ".ninja_log")) as f:
+            for line in f:
+                if line.startswith("#"):
+                    continue
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 4:
+                    try:
+                        dur[parts[3]] = int(parts[1]) - int(parts[0])
+                    except ValueError:
+                        pass
+    except OSError:
+        pass
+    return dur
+
+
+class Dash:
+    def __init__(self, build_dir, ninja_args):
+        self.build_dir = os.path.abspath(build_dir)
+        self.ninja_args = ninja_args
+        self.id = next_id()
+        self.dir = os.path.join(BUILDS, str(self.id))
+        os.makedirs(self.dir, exist_ok=True)
+        self.log = open(os.path.join(self.dir, "build.log"), "a", buffering=1)
+        self.lock = threading.Lock()
+        self.proc = None
+        self.stopped = False
+        self.durations = load_durations(self.build_dir)
+        known = [v for v in self.durations.values() if v > 0]
+        self.avg = (sum(known) / len(known)) if known else 15000
+        self.s = {
+            "id": self.id, "pid": os.getpid(), "buildDir": self.build_dir,
+            "command": "ninja " + " ".join(ninja_args),
+            "started": now_iso(), "ended": None, "phase": "building",
+            "step": "Starting ninja", "done": 0, "total": 0,
+            "installDone": 0, "installTotal": 0,
+            "failed": 0, "exitCode": None, "installExitCode": None,
+            "result": None, "current": [], "lastLine": "",
+        }
+        self.flush()
+
+    def flush(self):
+        with self.lock:
+            tmp = os.path.join(self.dir, "status.json.tmp")
+            with open(tmp, "w") as f:
+                json.dump(self.s, f)
+            os.replace(tmp, os.path.join(self.dir, "status.json"))
+
+    def emit(self, line):
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+        self.log.write(line + "\n")
+        self.s["lastLine"] = line[-300:]
+
+    # -- currently-compiling objects, discovered from the process tree --
+    def scan_current(self):
+        if not self.proc or self.proc.poll() is not None:
+            return []
+        root = self.proc.pid
+        ppid, cmds = {}, {}
+        for p in os.listdir("/proc"):
+            if not p.isdigit():
+                continue
+            try:
+                with open(f"/proc/{p}/stat") as f:
+                    st = f.read()
+                ppid[int(p)] = int(st[st.rfind(")") + 2:].split()[1])
+                with open(f"/proc/{p}/cmdline", "rb") as f:
+                    cmds[int(p)] = f.read().split(b"\0")
+            except Exception:
+                continue
+        out, seen = [], set()
+        for pid, argv in cmds.items():
+            q, depth = pid, 0
+            while q in ppid and q != root and depth < 8:
+                q, depth = ppid[q], depth + 1
+            if q != root or pid == root:
+                continue
+            args = [a.decode(errors="replace") for a in argv if a]
+            if "-o" not in args or not args:
+                continue
+            exe = os.path.basename(args[0])
+            if exe in ("sh", "bash", "ccache"):
+                continue
+            target = args[args.index("-o") + 1] if args.index("-o") + 1 < len(args) else "?"
+            if target in seen:
+                continue
+            seen.add(target)
+            src = ""
+            if "-c" in args and args.index("-c") + 1 < len(args):
+                src = args[args.index("-c") + 1]
+            try:
+                age = (time.time() - os.stat(f"/proc/{pid}").st_mtime) * 1000
+            except OSError:
+                age = 0
+            est = self.durations.get(target) or self.avg
+            kind = "Linking" if "-c" not in args else "Compiling"
+            out.append({"output": target, "source": src, "kind": kind,
+                        "elapsedMs": int(age), "estimateMs": int(max(est, 1000))})
+        out.sort(key=lambda x: -x["elapsedMs"])
+        return out
+
+    def monitor(self):
+        while self.proc is None or self.proc.poll() is None:
+            try:
+                self.s["current"] = self.scan_current()
+            except Exception:
+                pass
+            self.flush()
+            time.sleep(1)
+
+    def run(self, args, on_line):
+        self.proc = subprocess.Popen(
+            args, cwd=self.build_dir, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, start_new_session=True,
+            env=dict(os.environ, NINJA_STATUS="[%f/%t] ", CLICOLOR_FORCE="1"))
+        t = threading.Thread(target=self.monitor, daemon=True)
+        t.start()
+        for raw in self.proc.stdout:
+            line = raw.decode(errors="replace").rstrip("\n")
+            on_line(line)
+            self.emit(line)
+        rc = self.proc.wait()
+        t.join(timeout=2)
+        self.s["current"] = []
+        return rc
+
+    def on_build_line(self, line):
+        m = STATUS_RE.match(line)
+        if m:
+            self.s["done"], self.s["total"] = int(m.group(1)), int(m.group(2))
+            self.s["step"] = m.group(3)[:300]
+        elif line.startswith("FAILED:"):
+            self.s["failed"] += 1
+
+    def on_install_line(self, line):
+        if line.startswith("-- Install") or line.startswith("-- Up-to-date"):
+            self.s["installDone"] += 1
+            self.s["step"] = line[:300]
+
+    def stop(self, *_):
+        self.stopped = True
+        if self.proc and self.proc.poll() is None:
+            try:
+                os.killpg(self.proc.pid, signal.SIGTERM)
+            except OSError:
+                pass
+
+    def main(self):
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            signal.signal(sig, self.stop)
+        self.emit(f"== ninja-dash build #{self.id} started {self.s['started']} in {self.build_dir}")
+        self.emit("== $ " + self.s["command"])
+        rc = self.run(["ninja"] + self.ninja_args, self.on_build_line)
+        self.s["exitCode"] = rc
+        if not self.stopped and rc == 0 and os.environ.get("NINJA_DASH_NO_INSTALL") != "1":
+            self.s["phase"], self.s["step"] = "installing", "Installing (ninja install)"
+            manifest = os.path.join(self.build_dir, "install_manifest.txt")
+            try:
+                with open(manifest) as f:
+                    self.s["installTotal"] = sum(1 for _ in f)
+            except OSError:
+                pass
+            self.flush()
+            self.emit("== $ ninja install")
+            irc = self.run(["ninja", "install"], self.on_install_line)
+            self.s["installExitCode"] = irc
+            if self.s["installTotal"] < self.s["installDone"]:
+                self.s["installTotal"] = self.s["installDone"]
+        else:
+            irc = None
+        self.s["ended"] = now_iso()
+        if self.stopped:
+            self.s["phase"], self.s["result"] = "stopped", "Stopped by user"
+        elif rc != 0:
+            self.s["phase"] = "failed"
+            self.s["result"] = f"Compilation failed ({self.s['failed']} failed target(s), {self.s['done']}/{self.s['total']} steps)"
+        elif irc not in (None, 0):
+            self.s["phase"], self.s["result"] = "failed", f"Compiled OK, install failed (exit {irc})"
+        else:
+            self.s["phase"] = "completed"
+            self.s["result"] = f"Success ({self.s['total']} steps" + (", installed)" if irc == 0 else ")")
+        self.s["step"] = self.s["result"]
+        self.emit(f"== ninja-dash build #{self.id} {self.s['phase']}: {self.s['result']}")
+        self.flush()
+        return 0 if self.s["phase"] == "completed" else 1
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ("-h", "--help"):
+        print(__doc__)
+        return 2
+    build_dir = argv[1]
+    rest = argv[2:]
+    if rest and rest[0] == "--":
+        rest = rest[1:]
+    if not os.path.isfile(os.path.join(build_dir, "build.ninja")):
+        print(f"ninja-dash: no build.ninja in {build_dir} (run cmake -G Ninja first)", file=sys.stderr)
+        return 2
+    rb = running_build()
+    if rb:
+        print(f"ninja-dash: build #{rb['id']} is already running (pid {rb['pid']})", file=sys.stderr)
+        return 3
+    return Dash(build_dir, rest).main()
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

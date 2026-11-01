@@ -1,0 +1,44 @@
+<UserControl x:Class="TeamLigma.Panel.Views.LoginView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Grid Background="{StaticResource TlBg}">
+    <Border Width="440" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource TlCardStyle}" Padding="32,28">
+      <StackPanel Spacing="16">
+        <Border CornerRadius="8" Background="White" Padding="4" HorizontalAlignment="Center" Width="260">
+          <Image Source="ms-appx:///Assets/teamligma.png" Stretch="Uniform" />
+        </Border>
+        <StackPanel Spacing="4">
+          <TextBlock x:Name="Heading" Style="{StaticResource TlPageTitle}" FontSize="22" Text="Sign in" HorizontalAlignment="Center" />
+          <TextBlock x:Name="SubHeading" Foreground="{StaticResource TlTextMuted}" TextWrapping="Wrap" TextAlignment="Center"
+                     Text="Team Ligma Development Panel" />
+        </StackPanel>
+
+        <Border x:Name="MessageBox" Visibility="Collapsed" CornerRadius="6" Padding="12,8" Background="#3A2420" BorderBrush="{StaticResource TlDanger}" BorderThickness="1">
+          <TextBlock x:Name="MessageText" TextWrapping="Wrap" Foreground="{StaticResource TlText}" FontSize="13" />
+        </Border>
+
+        <!-- Step 1: username + password (also used for first-run setup) -->
+        <StackPanel x:Name="PasswordStep" Spacing="12">
+          <TextBox x:Name="UserBox" Header="Username" PlaceholderText="username" KeyDown="OnKeyDown" />
+          <PasswordBox x:Name="PassBox" Header="Password" KeyDown="OnKeyDown" />
+          <PasswordBox x:Name="ConfirmBox" Header="Confirm password" Visibility="Collapsed" KeyDown="OnKeyDown" />
+          <TextBlock x:Name="SetupHint" Visibility="Collapsed" Style="{StaticResource TlLabel}" TextWrapping="Wrap"
+                     Text="At least 10 characters. Usernames: 3-32 lowercase letters, digits, '.', '_' or '-'." />
+        </StackPanel>
+
+        <!-- Step 2: authenticator code -->
+        <StackPanel x:Name="TotpStep" Spacing="12" Visibility="Collapsed">
+          <TextBlock x:Name="CodeLabel" Text="Authenticator code" Foreground="{StaticResource TlText}" Margin="0,0,0,-6" />
+          <TextBox x:Name="CodeBox" PlaceholderText="123 456" FontFamily="{StaticResource TlMono}"
+                   FontSize="20" MaxLength="12" KeyDown="OnKeyDown" />
+          <HyperlinkButton x:Name="RecoveryLink" Content="Use a recovery code instead" Click="OnToggleRecovery" Padding="0" />
+        </StackPanel>
+
+        <Button x:Name="SubmitButton" Style="{StaticResource AccentButtonStyle}" HorizontalAlignment="Stretch" Padding="12,9" Click="OnSubmit">
+          <TextBlock x:Name="SubmitText" Text="Sign in" FontWeight="SemiBold" />
+        </Button>
+        <HyperlinkButton x:Name="BackLink" Content="← Back" Visibility="Collapsed" Click="OnBack" HorizontalAlignment="Center" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

@@ -1,0 +1,33 @@
+<UserControl x:Class="TeamLigma.Panel.Controls.TerminalView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:TeamLigma.Panel.Controls">
+  <Border Background="{StaticResource TlTerminal}" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="1" CornerRadius="8">
+    <Grid>
+      <ScrollViewer x:Name="Scroller" Padding="10,8,10,8"
+                    HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto">
+        <ItemsRepeater x:Name="List">
+          <ItemsRepeater.Layout>
+            <StackLayout Orientation="Vertical" />
+          </ItemsRepeater.Layout>
+          <ItemsRepeater.ItemTemplate>
+            <DataTemplate x:DataType="local:TermLine">
+              <TextBlock local:TerminalView.Line="{x:Bind}"
+                         FontFamily="{StaticResource TlMono}"
+                         FontSize="12.5"
+                         LineHeight="17"
+                         TextWrapping="Wrap"
+                         Foreground="#D7D5CC" />
+            </DataTemplate>
+          </ItemsRepeater.ItemTemplate>
+        </ItemsRepeater>
+      </ScrollViewer>
+      <TextBlock x:Name="Placeholder" Margin="14,10" Foreground="{StaticResource TlTextMuted}"
+                 FontFamily="{StaticResource TlMono}" FontSize="12.5" Text="No output yet." />
+      <Button x:Name="JumpButton" Content="↓ Follow output" Visibility="Collapsed"
+              HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,18,12"
+              Style="{StaticResource AccentButtonStyle}" Click="OnJump" />
+    </Grid>
+  </Border>
+</UserControl>

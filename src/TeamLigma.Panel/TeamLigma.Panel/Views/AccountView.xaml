@@ -1,0 +1,96 @@
+<UserControl x:Class="TeamLigma.Panel.Views.AccountView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:TeamLigma.Panel.Controls">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Padding="28,24,28,28" Spacing="18">
+      <StackPanel Spacing="2">
+        <TextBlock Style="{StaticResource TlPageTitle}" Text="My Account" />
+        <TextBlock Foreground="{StaticResource TlTextMuted}" Text="Your sign-in details and two-factor protection." />
+      </StackPanel>
+
+      <Border Style="{StaticResource TlCardStyle}">
+        <Grid ColumnSpacing="32">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <StackPanel><TextBlock Style="{StaticResource TlLabel}" Text="USERNAME" /><TextBlock x:Name="NameText" Style="{StaticResource TlValue}" FontSize="18" /></StackPanel>
+          <StackPanel Grid.Column="1"><TextBlock Style="{StaticResource TlLabel}" Text="ROLE" /><TextBlock x:Name="RoleText" Style="{StaticResource TlValue}" FontSize="18" /></StackPanel>
+          <StackPanel Grid.Column="2"><TextBlock Style="{StaticResource TlLabel}" Text="LAST SIGN-IN" /><TextBlock x:Name="LastText" Style="{StaticResource TlValue}" FontSize="18" /></StackPanel>
+        </Grid>
+      </Border>
+
+      <Border Style="{StaticResource TlCardStyle}">
+        <StackPanel Spacing="12">
+          <TextBlock Style="{StaticResource TlCardTitle}" Text="CHANGE PASSWORD" />
+          <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <PasswordBox x:Name="CurrentPass" Header="Current password" />
+            <PasswordBox x:Name="NewPass" Grid.Column="1" Header="New password (10+ characters)" />
+            <PasswordBox x:Name="ConfirmPass" Grid.Column="2" Header="Confirm new password" />
+            <Button Grid.Column="3" VerticalAlignment="Bottom" Content="Change password" Click="OnChangePassword" />
+          </Grid>
+          <TextBlock Style="{StaticResource TlLabel}" Text="Changing your password signs out your other sessions." />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource TlCardStyle}">
+        <StackPanel Spacing="14">
+          <Grid>
+            <TextBlock Style="{StaticResource TlCardTitle}" Text="AUTHENTICATOR APP (TWO-FACTOR SIGN-IN)" VerticalAlignment="Center" />
+            <Border x:Name="TotpPill" HorizontalAlignment="Right" CornerRadius="10" Padding="10,3" Background="#555450">
+              <TextBlock x:Name="TotpPillText" FontSize="12" FontWeight="SemiBold" Foreground="White" Text="Off" />
+            </Border>
+          </Grid>
+
+          <!-- Not enrolled -->
+          <StackPanel x:Name="OffPanel" Spacing="10">
+            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TlTextSecondary}"
+                       Text="Protect your account with a 6-digit code from an authenticator app such as Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden or Aegis. After it is enabled you will need the code every time you sign in." />
+            <Button x:Name="BeginButton" Style="{StaticResource AccentButtonStyle}" Content="Set up authenticator app" Click="OnBegin" />
+          </StackPanel>
+
+          <!-- Enrolment -->
+          <Grid x:Name="SetupPanel" Visibility="Collapsed" ColumnSpacing="28">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <c:QrView x:Name="Qr" VerticalAlignment="Top" />
+            <StackPanel Grid.Column="1" Spacing="12">
+              <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TlText}" Text="1.  Scan this QR code with your authenticator app." />
+              <StackPanel Spacing="4">
+                <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TlTextSecondary}" Text="Can't scan it? Add an account manually with this key (time-based, 6 digits, 30 seconds):" />
+                <TextBox x:Name="SecretBox" IsReadOnly="True" FontFamily="{StaticResource TlMono}" FontSize="15" />
+              </StackPanel>
+              <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TlText}" Text="2.  Enter the 6-digit code the app shows to finish." />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBox x:Name="ConfirmCode" Width="160" PlaceholderText="123456" MaxLength="7" FontFamily="{StaticResource TlMono}" FontSize="18" KeyDown="OnConfirmKeyDown" />
+                <Button Style="{StaticResource AccentButtonStyle}" Content="Verify &amp; enable" Click="OnConfirm" VerticalAlignment="Stretch" />
+                <Button Content="Cancel" Click="OnCancelSetup" VerticalAlignment="Stretch" />
+              </StackPanel>
+            </StackPanel>
+          </Grid>
+
+          <!-- Recovery codes (shown once) -->
+          <Border x:Name="CodesPanel" Visibility="Collapsed" CornerRadius="8" Padding="16" Background="{StaticResource TlAccentSoft}" BorderBrush="{StaticResource TlAccent}" BorderThickness="1">
+            <StackPanel Spacing="10">
+              <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TlText}" Text="Save your recovery codes" />
+              <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TlTextSecondary}"
+                         Text="Each code signs you in once if you lose your phone. They will not be shown again - store them somewhere safe." />
+              <TextBox x:Name="CodesBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="{StaticResource TlMono}" FontSize="15" />
+              <Button Content="I have saved these codes" Click="OnCodesSaved" />
+            </StackPanel>
+          </Border>
+
+          <!-- Enrolled -->
+          <StackPanel x:Name="OnPanel" Spacing="12" Visibility="Collapsed">
+            <TextBlock x:Name="OnText" TextWrapping="Wrap" Foreground="{StaticResource TlTextSecondary}" />
+            <Grid ColumnSpacing="12">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+              <PasswordBox x:Name="ManagePass" Header="Password" />
+              <TextBox x:Name="ManageCode" Grid.Column="1" Header="Authenticator or recovery code" FontFamily="{StaticResource TlMono}" />
+              <Button Grid.Column="2" VerticalAlignment="Bottom" Content="New recovery codes" Click="OnRegenerate" ToolTipService.ToolTip="Needs your password" />
+              <Button Grid.Column="3" VerticalAlignment="Bottom" Content="Disable two-factor" Click="OnDisable" Background="{StaticResource TlDanger}" Foreground="White" />
+            </Grid>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

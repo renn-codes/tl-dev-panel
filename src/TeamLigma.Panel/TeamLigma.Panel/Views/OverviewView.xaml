@@ -1,0 +1,95 @@
+<UserControl x:Class="TeamLigma.Panel.Views.OverviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:TeamLigma.Panel.Views"
+             xmlns:c="using:TeamLigma.Panel.Controls">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Padding="28,24,28,28" Spacing="18">
+      <StackPanel Spacing="2">
+        <TextBlock Style="{StaticResource TlPageTitle}" Text="Overview" />
+        <TextBlock x:Name="Subtitle" Foreground="{StaticResource TlTextMuted}" Text="Live state of the current build and the host." />
+      </StackPanel>
+
+      <Grid ColumnSpacing="18">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="3*" />
+          <ColumnDefinition Width="2*" />
+        </Grid.ColumnDefinitions>
+        <Border Style="{StaticResource TlCardStyle}">
+          <StackPanel Spacing="14">
+            <TextBlock Style="{StaticResource TlCardTitle}" Text="CURRENT BUILD" />
+            <v:BuildDash x:Name="Dash" MaxObjects="6" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="1" Style="{StaticResource TlCardStyle}">
+          <StackPanel Spacing="12">
+            <TextBlock Style="{StaticResource TlCardTitle}" Text="SERVER COMPONENTS" />
+            <Grid x:Name="ComponentsHeader" ColumnSpacing="8">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" /><ColumnDefinition Width="70" /><ColumnDefinition Width="64" /><ColumnDefinition Width="84" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Style="{StaticResource TlLabel}" Text="PROCESS" />
+              <TextBlock Grid.Column="1" Style="{StaticResource TlLabel}" Text="PID" />
+              <TextBlock Grid.Column="2" Style="{StaticResource TlLabel}" Text="CPU" />
+              <TextBlock Grid.Column="3" Style="{StaticResource TlLabel}" Text="MEMORY" />
+            </Grid>
+            <StackPanel x:Name="ComponentsPanel" Spacing="8" />
+            <Border Height="1" Background="{StaticResource TlCardBorder}" Margin="0,4" />
+            <Grid ColumnSpacing="12" RowSpacing="10">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+              <StackPanel><TextBlock Style="{StaticResource TlLabel}" Text="HOST" /><TextBlock x:Name="HostText" Style="{StaticResource TlValue}" /></StackPanel>
+              <StackPanel Grid.Column="1"><TextBlock Style="{StaticResource TlLabel}" Text="UPTIME" /><TextBlock x:Name="UptimeText" Style="{StaticResource TlValue}" /></StackPanel>
+              <StackPanel Grid.Row="1"><TextBlock Style="{StaticResource TlLabel}" Text="LOAD AVERAGE" /><TextBlock x:Name="LoadText" Style="{StaticResource TlValue}" /></StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock Style="{StaticResource TlLabel}" Text="PROCESSES" /><TextBlock x:Name="ProcText" Style="{StaticResource TlValue}" /></StackPanel>
+              <StackPanel Grid.Row="2"><TextBlock Style="{StaticResource TlLabel}" Text="DISK I/O" /><TextBlock x:Name="DiskIoText" Style="{StaticResource TlValue}" /></StackPanel>
+              <StackPanel Grid.Row="2" Grid.Column="1"><TextBlock Style="{StaticResource TlLabel}" Text="OS" /><TextBlock x:Name="OsText" Style="{StaticResource TlValue}" /></StackPanel>
+            </Grid>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <Border Style="{StaticResource TlCardStyle}">
+        <StackPanel Spacing="16">
+          <TextBlock Style="{StaticResource TlCardTitle}" Text="SYSTEM USAGE" />
+          <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <c:RingGauge x:Name="CpuGauge" Caption="CPU" />
+            <c:RingGauge x:Name="MemGauge" Grid.Column="1" Caption="Memory" />
+            <c:RingGauge x:Name="DiskGauge" Grid.Column="2" Caption="Disk" />
+            <c:RingGauge x:Name="SwapGauge" Grid.Column="3" Caption="Swap" />
+          </Grid>
+          <Grid ColumnSpacing="18" RowSpacing="18">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+            <StackPanel Spacing="6">
+              <Grid><TextBlock Style="{StaticResource TlLabel}" Text="CPU HISTORY (5 MIN)" /><TextBlock x:Name="CpuNow" Style="{StaticResource TlLabel}" HorizontalAlignment="Right" /></Grid>
+              <Border Background="{StaticResource TlTerminal}" CornerRadius="6" Padding="4"><c:Sparkline x:Name="CpuSpark" Height="90" Maximum="100" /></Border>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="6">
+              <Grid><TextBlock Style="{StaticResource TlLabel}" Text="MEMORY HISTORY (5 MIN)" /><TextBlock x:Name="MemNow" Style="{StaticResource TlLabel}" HorizontalAlignment="Right" /></Grid>
+              <Border Background="{StaticResource TlTerminal}" CornerRadius="6" Padding="4"><c:Sparkline x:Name="MemSpark" Height="90" Maximum="100" /></Border>
+            </StackPanel>
+            <StackPanel Grid.Row="1" Spacing="6">
+              <Grid><TextBlock Style="{StaticResource TlLabel}" Text="NETWORK" /><TextBlock x:Name="NetNow" Style="{StaticResource TlLabel}" HorizontalAlignment="Right" /></Grid>
+              <Border Background="{StaticResource TlTerminal}" CornerRadius="6" Padding="4">
+                <Grid Height="90">
+                  <c:Sparkline x:Name="RxSpark" />
+                  <c:Sparkline x:Name="TxSpark" />
+                </Grid>
+              </Border>
+            </StackPanel>
+            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="6">
+              <Grid><TextBlock Style="{StaticResource TlLabel}" Text="PER-CORE LOAD" /><TextBlock x:Name="CoresNow" Style="{StaticResource TlLabel}" HorizontalAlignment="Right" /></Grid>
+              <Border Background="{StaticResource TlTerminal}" CornerRadius="6" Padding="10,8">
+                <StackPanel x:Name="CoresPanel" Spacing="6" MinHeight="74" />
+              </Border>
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

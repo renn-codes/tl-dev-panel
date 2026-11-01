@@ -1,0 +1,87 @@
+<Application x:Class="TeamLigma.Panel.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             RequestedTheme="Dark">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+        <ResourceDictionary>
+          <!-- Claude Dark palette with burnt-orange accents -->
+          <Color x:Key="SystemAccentColor">#CC5500</Color>
+          <Color x:Key="SystemAccentColorLight1">#D9692A</Color>
+          <Color x:Key="SystemAccentColorLight2">#E07A3F</Color>
+          <Color x:Key="SystemAccentColorLight3">#EB9765</Color>
+          <Color x:Key="SystemAccentColorDark1">#B34A00</Color>
+          <Color x:Key="SystemAccentColorDark2">#963E00</Color>
+          <Color x:Key="SystemAccentColorDark3">#7A3200</Color>
+
+          <Color x:Key="TlBgColor">#1F1E1D</Color>
+          <Color x:Key="TlSidebarColor">#262624</Color>
+          <Color x:Key="TlCardColor">#2B2A27</Color>
+          <Color x:Key="TlCardBorderColor">#3D3C38</Color>
+          <Color x:Key="TlTerminalColor">#181716</Color>
+          <Color x:Key="TlTextColor">#F0EEE6</Color>
+          <Color x:Key="TlTextSecondaryColor">#B7B5A9</Color>
+          <Color x:Key="TlTextMutedColor">#85837A</Color>
+          <Color x:Key="TlAccentColor">#CC5500</Color>
+          <Color x:Key="TlAccentSoftColor">#3A2618</Color>
+
+          <SolidColorBrush x:Key="TlBg" Color="{StaticResource TlBgColor}" />
+          <SolidColorBrush x:Key="TlSidebar" Color="{StaticResource TlSidebarColor}" />
+          <SolidColorBrush x:Key="TlCard" Color="{StaticResource TlCardColor}" />
+          <SolidColorBrush x:Key="TlCardBorder" Color="{StaticResource TlCardBorderColor}" />
+          <SolidColorBrush x:Key="TlTerminal" Color="{StaticResource TlTerminalColor}" />
+          <SolidColorBrush x:Key="TlText" Color="{StaticResource TlTextColor}" />
+          <SolidColorBrush x:Key="TlTextSecondary" Color="{StaticResource TlTextSecondaryColor}" />
+          <SolidColorBrush x:Key="TlTextMuted" Color="{StaticResource TlTextMutedColor}" />
+          <SolidColorBrush x:Key="TlAccent" Color="{StaticResource TlAccentColor}" />
+          <SolidColorBrush x:Key="TlAccentSoft" Color="{StaticResource TlAccentSoftColor}" />
+          <SolidColorBrush x:Key="TlTrack" Color="#3A3935" />
+          <SolidColorBrush x:Key="TlDanger" Color="#C8403A" />
+          <SolidColorBrush x:Key="TlDangerHover" Color="#DC4F48" />
+          <SolidColorBrush x:Key="TlSuccess" Color="#6FBF73" />
+
+          <FontFamily x:Key="TlMono">ms-appx:///Assets/Fonts/DejaVuSansMono.ttf#DejaVu Sans Mono</FontFamily>
+
+          <x:Double x:Key="ContentDialogMaxWidth">1600</x:Double>
+          <x:Double x:Key="ContentDialogMaxHeight">1200</x:Double>
+
+          <Style x:Key="TlCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource TlCard}" />
+            <Setter Property="BorderBrush" Value="{StaticResource TlCardBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="18,16" />
+          </Style>
+          <Style x:Key="TlCardTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TlTextSecondary}" />
+            <Setter Property="CharacterSpacing" Value="60" />
+          </Style>
+          <Style x:Key="TlPageTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="26" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource TlText}" />
+          </Style>
+          <Style x:Key="TlLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource TlTextMuted}" />
+          </Style>
+          <Style x:Key="TlValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{StaticResource TlText}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+          </Style>
+          <Style x:Key="TlMonoText" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource TlMono}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{StaticResource TlTextSecondary}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+          </Style>
+        </ResourceDictionary>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

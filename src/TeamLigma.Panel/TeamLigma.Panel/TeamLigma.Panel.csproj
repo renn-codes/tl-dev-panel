@@ -1,0 +1,22 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net9.0-browserwasm</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <UnoSingleProject>true</UnoSingleProject>
+    <ApplicationTitle>Team Ligma Development Panel</ApplicationTitle>
+    <ApplicationId>com.teamligma.devpanel</ApplicationId>
+    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationPublisher>Team Ligma</ApplicationPublisher>
+    <Description>Team Ligma Development Panel - AzerothCore build and server console suite.</Description>
+    <Version>1.1.0</Version>
+    <UnoFeatures>
+      Mvvm;
+      SkiaRenderer;
+    </UnoFeatures>
+    <NoWarn>$(NoWarn);CA1416;MVVMTK0045;Uno0001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Shared/Dtos.cs" Link="Shared/Dtos.cs" />
+  </ItemGroup>
+</Project>

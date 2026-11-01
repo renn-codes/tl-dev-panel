@@ -1,0 +1,89 @@
+<UserControl x:Class="TeamLigma.Panel.Views.Shell"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:v="using:TeamLigma.Panel.Views">
+  <Grid Background="{StaticResource TlBg}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="236" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <!-- Sidebar -->
+    <Border Background="{StaticResource TlSidebar}" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="0,0,1,0">
+      <Grid Padding="16,20,16,16" RowSpacing="18">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel Spacing="10">
+          <Border CornerRadius="8" Background="White" Padding="4">
+            <Image Source="ms-appx:///Assets/teamligma.png" Stretch="Uniform" />
+          </Border>
+          <StackPanel Spacing="0">
+            <TextBlock Text="Development Panel" FontSize="16" FontWeight="SemiBold" Foreground="{StaticResource TlText}" />
+            <TextBlock Text="AzerothCore build &amp; server suite" FontSize="11.5" Foreground="{StaticResource TlTextMuted}" />
+          </StackPanel>
+        </StackPanel>
+
+        <StackPanel x:Name="Nav" Grid.Row="1" Spacing="4" />
+
+        <Border Grid.Row="2" VerticalAlignment="Top" Style="{StaticResource TlCardStyle}" Padding="12,10">
+          <StackPanel Spacing="8">
+            <TextBlock Style="{StaticResource TlLabel}" Text="AT A GLANCE" />
+            <Grid>
+              <TextBlock x:Name="SideBuild" FontSize="12.5" Foreground="{StaticResource TlTextSecondary}" Text="Build —" />
+              <Ellipse x:Name="SideBuildDot" Width="9" Height="9" HorizontalAlignment="Right" Fill="#555450" />
+            </Grid>
+            <Grid>
+              <TextBlock FontSize="12.5" Foreground="{StaticResource TlTextSecondary}" Text="Worldserver" />
+              <Ellipse x:Name="SideWorldDot" Width="9" Height="9" HorizontalAlignment="Right" Fill="#555450" />
+            </Grid>
+            <Grid>
+              <TextBlock FontSize="12.5" Foreground="{StaticResource TlTextSecondary}" Text="Authserver" />
+              <Ellipse x:Name="SideAuthDot" Width="9" Height="9" HorizontalAlignment="Right" Fill="#555450" />
+            </Grid>
+            <Grid>
+              <TextBlock FontSize="12.5" Foreground="{StaticResource TlTextSecondary}" Text="MySQL server" />
+              <Ellipse x:Name="SideMysqlDot" Width="9" Height="9" HorizontalAlignment="Right" Fill="#555450" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="3" Spacing="10">
+          <Border Style="{StaticResource TlCardStyle}" Padding="12,10">
+            <Grid ColumnSpacing="8">
+              <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock x:Name="UserNameText" FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource TlText}" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="UserRoleText" FontSize="11" Foreground="{StaticResource TlTextMuted}" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <Button Grid.Column="1" Content="Sign out" Padding="8,4" FontSize="12" VerticalAlignment="Center" Click="OnSignOut" />
+            </Grid>
+          </Border>
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Ellipse x:Name="ConnDot" Width="8" Height="8" Fill="#6FBF73" VerticalAlignment="Center" />
+            <TextBlock x:Name="ConnText" FontSize="11.5" Foreground="{StaticResource TlTextMuted}" Text="Connected" />
+          </StackPanel>
+          <TextBlock x:Name="VersionText" FontSize="11" Foreground="{StaticResource TlTextMuted}" Text="Team Ligma · v1.0.0" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Content -->
+    <Grid Grid.Column="1">
+      <v:OverviewView x:Name="OverviewPage" />
+      <v:BuildConsoleView x:Name="BuildPage" Visibility="Collapsed" />
+      <v:HistoryView x:Name="HistoryPage" Visibility="Collapsed" />
+      <v:ServersView x:Name="ServersPage" Visibility="Collapsed" />
+      <v:AccountView x:Name="AccountPage" Visibility="Collapsed" />
+      <v:UsersView x:Name="UsersPage" Visibility="Collapsed" />
+      <!-- toast -->
+      <Border x:Name="Toast" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,24,24"
+              MaxWidth="520" CornerRadius="8" Padding="16,10" Background="#3A3935" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="1">
+        <TextBlock x:Name="ToastText" TextWrapping="Wrap" Foreground="{StaticResource TlText}" />
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

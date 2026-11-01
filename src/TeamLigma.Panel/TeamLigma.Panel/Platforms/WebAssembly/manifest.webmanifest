@@ -1,0 +1,10 @@
+{
+  "background_color": "#ffffff",
+  "description": "TeamLigma.Panel",
+  "display": "standalone",
+  "name": "TeamLigma.Panel",
+  "short_name": "TeamLigma.Panel",
+  "start_url": "/index.html",
+  "theme_color": "#ffffff",
+  "scope": "/"
+}

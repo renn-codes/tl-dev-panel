@@ -1,0 +1,215 @@
+// Shared wire contracts between TeamLigma.Panel (Uno WASM) and TeamLigma.Panel.Server.
+#nullable enable
+using System;
+using System.Collections.Generic;
+
+namespace TeamLigma.Shared;
+
+public sealed class BuildObject
+{
+    public string Output { get; set; } = "";
+    public string Source { get; set; } = "";
+    public string Kind { get; set; } = "Compiling";
+    public long ElapsedMs { get; set; }
+    public long EstimateMs { get; set; }
+}
+
+public sealed class BuildStatus
+{
+    public int Id { get; set; }
+    public int? Pid { get; set; }
+    public string Phase { get; set; } = "unknown";   // building|installing|completed|failed|stopped|interrupted
+    public string Step { get; set; } = "";
+    public string? Command { get; set; }
+    public DateTimeOffset? Started { get; set; }
+    public DateTimeOffset? Ended { get; set; }
+    public int Done { get; set; }
+    public int Total { get; set; }
+    public int InstallDone { get; set; }
+    public int InstallTotal { get; set; }
+    public int Failed { get; set; }
+    public int? ExitCode { get; set; }
+    public int? InstallExitCode { get; set; }
+    public string? Result { get; set; }
+    public string? LastLine { get; set; }
+    public List<BuildObject> Current { get; set; } = new();
+}
+
+public sealed class ProcInfo
+{
+    public string Name { get; set; } = "";
+    public bool Running { get; set; }
+    public int? Pid { get; set; }
+    public double Cpu { get; set; }
+    public long RssBytes { get; set; }
+}
+
+public sealed class SystemSnapshot
+{
+    public string Host { get; set; } = "";
+    public string Os { get; set; } = "";
+    public int CoreCount { get; set; }
+    public double Cpu { get; set; }
+    public List<double> Cores { get; set; } = new();
+    public long MemTotal { get; set; }
+    public long MemUsed { get; set; }
+    public long SwapTotal { get; set; }
+    public long SwapUsed { get; set; }
+    public double Load1 { get; set; }
+    public double Load5 { get; set; }
+    public double Load15 { get; set; }
+    public long DiskTotal { get; set; }
+    public long DiskUsed { get; set; }
+    public double NetRxBps { get; set; }
+    public double NetTxBps { get; set; }
+    public double DiskReadBps { get; set; }
+    public double DiskWriteBps { get; set; }
+    public long UptimeSeconds { get; set; }
+    public int Processes { get; set; }
+    public List<double> CpuHistory { get; set; } = new();
+    public List<double> MemHistory { get; set; } = new();
+    public List<double> NetRxHistory { get; set; } = new();
+    public List<double> NetTxHistory { get; set; } = new();
+    public List<ProcInfo> Components { get; set; } = new();
+}
+
+public sealed class ServerStatus
+{
+    public string Name { get; set; } = "";
+    public string Title { get; set; } = "";
+    public bool SessionActive { get; set; }
+    public bool ProcessRunning { get; set; }
+    public int? Pid { get; set; }
+    /// <summary>"password" when the console is waiting for a hidden password.</summary>
+    public string? InputHint { get; set; }
+    public string Command { get; set; } = "";
+}
+
+public sealed class LogChunk
+{
+    public string Key { get; set; } = "";
+    public string Title { get; set; } = "";
+    public string Text { get; set; } = "";
+    public long Offset { get; set; }
+    public bool Running { get; set; }
+    public bool Reset { get; set; }
+}
+
+public sealed class TaskState
+{
+    public string? Name { get; set; }
+    public bool Running { get; set; }
+    public int? ExitCode { get; set; }
+    public DateTimeOffset? Started { get; set; }
+    public DateTimeOffset? Ended { get; set; }
+}
+
+public sealed class Overview
+{
+    public BuildStatus? Build { get; set; }
+    public SystemSnapshot System { get; set; } = new();
+    public List<ServerStatus> Servers { get; set; } = new();
+    public TaskState Task { get; set; } = new();
+    public string Version { get; set; } = "";
+}
+
+public sealed class ActionResult
+{
+    public bool Ok { get; set; }
+    public string Message { get; set; } = "";
+}
+
+public sealed class InputRequest
+{
+    public string Text { get; set; } = "";
+}
+
+// ---------------- Accounts & authentication (v1.1.0) ----------------
+
+public static class Roles
+{
+    public const string Admin = "admin";
+    public const string Operator = "operator";
+    public const string Viewer = "viewer";
+    public static readonly string[] All = { Admin, Operator, Viewer };
+}
+
+public sealed class UserInfo
+{
+    public string Username { get; set; } = "";
+    public string Role { get; set; } = Roles.Viewer;
+    public bool TotpEnabled { get; set; }
+    public int RecoveryCodesLeft { get; set; }
+    public DateTimeOffset Created { get; set; }
+    public DateTimeOffset? LastLogin { get; set; }
+    public string? LastLoginIp { get; set; }
+    public bool Locked { get; set; }
+}
+
+public sealed class AuthState
+{
+    public bool SetupRequired { get; set; }
+    public bool Authenticated { get; set; }
+    public UserInfo? User { get; set; }
+    public string Version { get; set; } = "";
+}
+
+public sealed class LoginRequest
+{
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+}
+
+public sealed class TotpLoginRequest
+{
+    public string Challenge { get; set; } = "";
+    public string Code { get; set; } = "";
+}
+
+public sealed class LoginResult
+{
+    public bool Ok { get; set; }
+    public string Message { get; set; } = "";
+    public bool RequiresTotp { get; set; }
+    public string? Challenge { get; set; }
+    public AuthState? State { get; set; }
+}
+
+public sealed class TotpSetup
+{
+    public string Secret { get; set; } = "";
+    public string Uri { get; set; } = "";
+    /// <summary>QR module matrix, one string per row ('1' = dark).</summary>
+    public List<string> Matrix { get; set; } = new();
+}
+
+public sealed class CodeRequest
+{
+    public string Code { get; set; } = "";
+    public string Password { get; set; } = "";
+}
+
+public sealed class RecoveryCodesResult
+{
+    public bool Ok { get; set; }
+    public string Message { get; set; } = "";
+    public List<string> Codes { get; set; } = new();
+}
+
+public sealed class PasswordChangeRequest
+{
+    public string Current { get; set; } = "";
+    public string New { get; set; } = "";
+}
+
+public sealed class CreateUserRequest
+{
+    public string Username { get; set; } = "";
+    public string Password { get; set; } = "";
+    public string Role { get; set; } = Roles.Operator;
+}
+
+public sealed class SetRoleRequest
+{
+    public string Role { get; set; } = Roles.Operator;
+}

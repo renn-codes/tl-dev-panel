@@ -1,0 +1,14 @@
+[Unit]
+Description=Team Ligma Development Panel backend
+After=network.target mysql.service
+
+[Service]
+WorkingDirectory=/roc/claude/panel/server
+ExecStart=/usr/bin/dotnet /roc/claude/panel/server/TeamLigma.Panel.Server.dll
+Restart=on-failure
+User=root
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+
+[Install]
+WantedBy=multi-user.target
