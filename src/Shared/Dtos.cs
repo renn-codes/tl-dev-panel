@@ -224,6 +224,13 @@ public sealed class BuildSettings
     public bool SourceFound { get; set; }
     public string BuildCommand { get; set; } = "";
     public string InstallCommand { get; set; } = "";
+    /// <summary>Thread count chosen in the panel, or null for automatic.</summary>
+    public int? Jobs { get; set; }
+    /// <summary>The -j value the next build will use.</summary>
+    public int EffectiveJobs { get; set; }
+    /// <summary>The build command exactly as the next build will run it.</summary>
+    public string EffectiveBuildCommand { get; set; } = "";
+    public CpuInfo Cpu { get; set; } = new();
 }
 
 public sealed class DirEntry
@@ -247,4 +254,27 @@ public sealed class DirListing
 public sealed class PathRequest
 {
     public string Path { get; set; } = "";
+}
+
+// ---------------- Build CPU threads (v1.3.0) ----------------
+
+public sealed class CpuInfo
+{
+    public string Model { get; set; } = "";
+    public int LogicalCpus { get; set; }
+    public int PhysicalCores { get; set; }
+    public int Sockets { get; set; }
+    public int ThreadsPerCore { get; set; }
+    public long MemTotal { get; set; }
+    /// <summary>Highest job count the RAM comfortably supports (~2 GB per clang job).</summary>
+    public int MemorySafeJobs { get; set; }
+    public int MinJobs { get; set; } = 1;
+    public int MaxJobs { get; set; }
+    public int RecommendedJobs { get; set; }
+}
+
+public sealed class JobsRequest
+{
+    /// <summary>null = automatic (the configured nproc - 1 command).</summary>
+    public int? Jobs { get; set; }
 }

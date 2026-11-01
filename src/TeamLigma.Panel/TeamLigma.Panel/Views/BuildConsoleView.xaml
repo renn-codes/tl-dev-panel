@@ -64,6 +64,24 @@
         <Button x:Name="BrowseButton" Grid.Column="2" Height="32" Padding="14,0" VerticalContentAlignment="Center" Content="Change…" Click="OnBrowse"
                 ToolTipService.ToolTip="Pick the Ninja build directory on the server" />
       </Grid>
+      <Grid ColumnSpacing="14" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="320" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Style="{StaticResource TlLabel}" Text="CPU THREADS" VerticalAlignment="Center" Width="104" />
+        <Slider x:Name="JobsSlider" Grid.Column="1" Minimum="1" Maximum="4" StepFrequency="1" TickFrequency="1"
+                TickPlacement="Outside" SnapsTo="Ticks" VerticalAlignment="Center" ValueChanged="OnJobsChanged" />
+        <TextBlock x:Name="JobsValue" Grid.Column="2" FontFamily="{StaticResource TlMono}" FontSize="15" FontWeight="SemiBold"
+                   Foreground="{StaticResource TlText}" VerticalAlignment="Center" MinWidth="64" Text="-j?" />
+        <CheckBox x:Name="JobsAuto" Grid.Column="3" Content="Auto" VerticalAlignment="Center" MinWidth="0"
+                  Checked="OnJobsAutoChanged" Unchecked="OnJobsAutoChanged"
+                  ToolTipService.ToolTip="Automatic: one less than the number of logical CPUs (ninja -j$(( $(nproc) - 1 )))" />
+        <TextBlock x:Name="CpuInfoText" Grid.Column="4" Style="{StaticResource TlLabel}" VerticalAlignment="Center" TextWrapping="Wrap" />
+      </Grid>
       </StackPanel>
     </Border>
 

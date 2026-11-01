@@ -18,6 +18,7 @@ public sealed class BuildService
     int _taskSeq;
     DateTimeOffset _lastTaskStart = DateTimeOffset.MinValue;
     string? _buildDirOverride;
+    int? _jobs;
     string SettingsPath => Path.Combine(_o.DataHome, "settings.json");
 
     /// <summary>The active build directory: the one chosen in the panel, else Panel:BuildDir from appsettings.</summary>
@@ -39,8 +40,10 @@ public sealed class BuildService
         {
             if (File.Exists(SettingsPath))
             {
-                var dir = JsonDocument.Parse(File.ReadAllText(SettingsPath)).RootElement.GetProperty("buildDir").GetString();
-                if (!string.IsNullOrWhiteSpace(dir)) _buildDirOverride = dir;
+                var root = JsonDocument.Parse(File.ReadAllText(SettingsPath)).RootElement;
+                if (root.TryGetProperty("buildDir", out var bd) && bd.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(bd.GetString()))
+                    _buildDirOverride = bd.GetString();
+                if (root.TryGetProperty("jobs", out var j) && j.ValueKind == JsonValueKind.Number) _jobs = j.GetInt32();
             }
         }
         catch (Exception ex) { _log.LogWarning(ex, "Ignoring unreadable {Path}", SettingsPath); }
@@ -54,7 +57,45 @@ public sealed class BuildService
         SourceFound = File.Exists(Path.Combine(Path.GetDirectoryName(BuildDir.TrimEnd('/')) ?? "/", "CMakeLists.txt")),
         BuildCommand = _o.BuildCommand,
         InstallCommand = _o.InstallCommand,
+        Jobs = _jobs,
+        EffectiveJobs = EffectiveJobs(CpuTopology.Detect()),
+        EffectiveBuildCommand = EffectiveBuildCommand(),
+        Cpu = CpuTopology.Detect(),
     };
+
+    void SaveSettings() => File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new { buildDir = _buildDirOverride, jobs = _jobs }, Json));
+
+    // Matches the -j argument of the build command: "-j$(( ... ))", "-j 8" or "-j8".
+    static readonly System.Text.RegularExpressions.Regex JobsArg =
+        new(@"-j\s*(\$\(\(.*?\)\)|\S+)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    int EffectiveJobs(CpuInfo cpu) => _jobs is { } j ? Math.Clamp(j, cpu.MinJobs, cpu.MaxJobs) : Math.Max(1, cpu.LogicalCpus - 1);
+
+    /// <summary>The build command for the next build. Automatic mode keeps the configured command
+    /// (except on single-CPU hosts, where nproc - 1 = 0 would mean unlimited jobs); a chosen thread
+    /// count replaces the command's -j argument.</summary>
+    public string EffectiveBuildCommand()
+    {
+        var cmd = Cmd(_o.BuildCommand);
+        if (cmd.Contains("ninja-dash")) return cmd; // legacy launch line, used verbatim
+        var cpu = CpuTopology.Detect();
+        if (_jobs == null && cpu.LogicalCpus > 1) return cmd;
+        var jobs = EffectiveJobs(cpu);
+        return JobsArg.IsMatch(cmd) ? JobsArg.Replace(cmd, $"-j{jobs}", 1) : $"{cmd} -j{jobs}";
+    }
+
+    public ActionResult SetJobs(int? jobs)
+    {
+        if (Running() is { } r) return Fail($"Build #{r.Id} is running; the thread count applies from the next build. Stop it first to change now.");
+        var cpu = CpuTopology.Detect();
+        if (jobs is { } j && (j < cpu.MinJobs || j > cpu.MaxJobs))
+            return Fail($"Choose between {cpu.MinJobs} and {cpu.MaxJobs} threads (this host has {cpu.LogicalCpus} logical CPUs).");
+        _jobs = jobs;
+        SaveSettings();
+        if (jobs == null) return Ok($"CPU threads set to automatic ({EffectiveJobs(cpu)}).");
+        var warn = jobs > cpu.MemorySafeJobs ? $" Warning: {jobs} jobs may exceed RAM ({cpu.MemTotal / 1024 / 1024 / 1024} GB; about {cpu.MemorySafeJobs} is safe)." : "";
+        return Ok($"CPU threads set to {jobs}.{warn}");
+    }
 
     static string Quote(string s) => "'" + s.Replace("'", "'\\''") + "'";
 
@@ -63,7 +104,7 @@ public sealed class BuildService
     /// A BuildCommand that already names ninja-dash (pre-1.2 configs) is used as-is.</summary>
     string LaunchCommand()
     {
-        var build = Cmd(_o.BuildCommand);
+        var build = EffectiveBuildCommand();
         if (build.Contains("ninja-dash")) return build;
         return $"screen -dmS build ninja-dash {Quote(BuildDir)} --build-cmd {Quote(build)}" +
                (string.IsNullOrWhiteSpace(_o.InstallCommand) ? "" : $" --install-cmd {Quote(Cmd(_o.InstallCommand))}");
@@ -78,7 +119,7 @@ public sealed class BuildService
         if (Running() is { } r) return Fail($"Build #{r.Id} is running; stop it before changing the build directory.");
         if (TaskRunning) return Fail($"Wait for '{Task.Name}' to finish first.");
         _buildDirOverride = full == _o.BuildDir.TrimEnd('/') ? null : full;
-        File.WriteAllText(SettingsPath, JsonSerializer.Serialize(new { buildDir = _buildDirOverride }, Json));
+        SaveSettings();
         var s = Settings();
         var note = s.Ready ? "Ready to build." : s.SourceFound ? "Run Prepare (CMake) before building." : "Warning: no CMakeLists.txt in the parent folder, so Prepare ('cmake ../') will not find the source.";
         return Ok($"Build directory set to {full}. {note}");

@@ -153,6 +153,7 @@ op.MapPost("/build/stop", async (HttpContext ctx, BuildService b, AuthService a)
 op.MapPost("/build/configure", (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "prepare (cmake)", b.Configure()));
 op.MapPost("/build/clean", (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "clean", b.Clean()));
 op.MapPost("/build/directory", (HttpContext ctx, PathRequest r, BuildService b, AuthService a) => Logged(ctx, a, $"set build directory {r.Path}", b.SetBuildDir(r.Path)));
+op.MapPost("/build/jobs", (HttpContext ctx, JobsRequest r, BuildService b, AuthService a) => Logged(ctx, a, $"set build threads {(r.Jobs?.ToString() ?? "auto")}", b.SetJobs(r.Jobs)));
 op.MapGet("/fs/dirs", (string? path, BuildService b) => DirBrowser.List(string.IsNullOrWhiteSpace(path) ? b.BuildDir : path));
 op.MapPost("/fs/mkdir", (HttpContext ctx, PathRequest r, AuthService a) => Logged(ctx, a, $"create folder {r.Path}", DirBrowser.Create(r.Path)));
 op.MapPost("/servers/{name}/start", async (HttpContext ctx, string name, ConsoleService c, AuthService a) => Logged(ctx, a, $"start {name}", await c.StartAsync(name)));

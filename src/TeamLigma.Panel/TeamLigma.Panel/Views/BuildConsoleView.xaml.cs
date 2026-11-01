@@ -15,6 +15,7 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
     {
         InitializeComponent();
         _timer.Tick += async (_, _) => await PollConsole();
+        _jobsSave.Tick += async (_, _) => await SaveJobs();
     }
 
     public void SetActive(bool active)
@@ -37,6 +38,8 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         CleanButton.IsEnabled = can && !building && !taskRunning;
         StopButton.IsEnabled = can && building;
         BrowseButton.IsEnabled = can && !building && !taskRunning;
+        JobsSlider.IsEnabled = can && !building && JobsAuto.IsChecked != true;
+        JobsAuto.IsEnabled = can && !building;
         if (++_settingsTick % 5 == 0) _ = RefreshBuildDir(); // a Prepare run can make the directory ready
         TaskText.Text = !can ? "Read-only: your role can watch builds but not run them."
             : taskRunning ? $"Running: {o.Task.Name}…"
@@ -58,10 +61,69 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
             : ("No source in parent", Windows.UI.Color.FromArgb(255, 0xC8, 0x40, 0x3A));
         BuildDirState.Text = text;
         BuildDirPill.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
-        ToolTipService.SetToolTip(StartButton, $"In {s.BuildDir}:\n  {s.BuildCommand}\n  then {s.InstallCommand}");
+        ToolTipService.SetToolTip(StartButton, $"In {s.BuildDir}:\n  {s.EffectiveBuildCommand}\n  then {s.InstallCommand}");
+        ShowJobs(s);
         ToolTipService.SetToolTip(BuildDirPill, s.Ready ? "build.ninja found: Start Build will work."
             : s.SourceFound ? "No build.ninja yet: run Prepare (CMake) first."
             : "The parent folder has no CMakeLists.txt, so Prepare ('cmake ../') will not find the AzerothCore source.");
+    }
+
+    bool _updatingJobs;
+    readonly DispatcherTimer _jobsSave = new() { Interval = TimeSpan.FromMilliseconds(600) };
+
+    void ShowJobs(BuildSettings s)
+    {
+        if (_jobsSave.IsEnabled) return; // don't fight the user while a change is pending
+        var cpu = s.Cpu;
+        _updatingJobs = true;
+        JobsSlider.Minimum = cpu.MinJobs;
+        JobsSlider.Maximum = Math.Max(cpu.MinJobs + 0.0001, cpu.MaxJobs); // a 1-CPU host still gets a valid range
+        JobsSlider.Value = s.EffectiveJobs;
+        JobsAuto.IsChecked = s.Jobs == null;
+        JobsSlider.IsEnabled = Session.CanOperate && s.Jobs != null;
+        _updatingJobs = false;
+        UpdateJobsText(s.EffectiveJobs);
+    }
+
+    void UpdateJobsText(int jobs)
+    {
+        JobsValue.Text = $"-j{jobs}";
+        var cpu = _settings?.Cpu;
+        if (cpu == null) return;
+        var smt = cpu.ThreadsPerCore > 1 ? $" × {cpu.ThreadsPerCore} threads" : "";
+        var ram = cpu.MemTotal / 1024.0 / 1024 / 1024;
+        var line = $"{cpu.LogicalCpus} logical CPUs ({cpu.Sockets} socket{(cpu.Sockets > 1 ? "s" : "")}, {cpu.PhysicalCores} cores{smt}) · {ram:0.#} GB RAM · recommended {cpu.RecommendedJobs}";
+        if (jobs > cpu.MemorySafeJobs) line += $"  ⚠ above the ~{cpu.MemorySafeJobs} jobs RAM can hold";
+        else if (jobs >= cpu.LogicalCpus && cpu.LogicalCpus > 1) line += "  · uses every CPU; the servers may lag during builds";
+        CpuInfoText.Text = line;
+        CpuInfoText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[jobs > cpu.MemorySafeJobs ? "TlAccent" : "TlTextMuted"];
+        ToolTipService.SetToolTip(CpuInfoText, cpu.Model);
+    }
+
+    void OnJobsChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        var jobs = (int)Math.Round(e.NewValue);
+        UpdateJobsText(jobs);
+        if (_updatingJobs) return;
+        _jobsSave.Stop();
+        _jobsSave.Start(); // save once the slider settles
+    }
+
+    async void OnJobsAutoChanged(object sender, RoutedEventArgs e)
+    {
+        if (_updatingJobs) return;
+        var auto = JobsAuto.IsChecked == true;
+        JobsSlider.IsEnabled = !auto && Session.CanOperate;
+        _jobsSave.Stop();
+        Shell.Notify(await ApiClient.Instance.SetJobsAsync(auto ? null : (int)Math.Round(JobsSlider.Value)));
+        await RefreshBuildDir();
+    }
+
+    async Task SaveJobs()
+    {
+        _jobsSave.Stop();
+        Shell.Notify(await ApiClient.Instance.SetJobsAsync((int)Math.Round(JobsSlider.Value)));
+        await RefreshBuildDir();
     }
 
     async void OnBrowse(object sender, RoutedEventArgs e)

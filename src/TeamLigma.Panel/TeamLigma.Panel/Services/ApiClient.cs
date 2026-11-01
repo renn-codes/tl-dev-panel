@@ -28,6 +28,7 @@ namespace TeamLigma.Panel.Services;
 [JsonSerializable(typeof(BuildSettings))]
 [JsonSerializable(typeof(DirListing))]
 [JsonSerializable(typeof(PathRequest))]
+[JsonSerializable(typeof(JobsRequest))]
 internal partial class PanelJson : JsonSerializerContext { }
 
 /// <summary>Thin client for the panel backend (same origin, proxied by nginx under /api).</summary>
@@ -154,6 +155,8 @@ public sealed class ApiClient
         => Get($"api/fs/dirs?path={Uri.EscapeDataString(path ?? "")}", PanelJson.Default.DirListing);
     public Task<ActionResult> SetBuildDirAsync(string path)
         => PostBody("api/build/directory", new PathRequest { Path = path }, PanelJson.Default.PathRequest);
+    public Task<ActionResult> SetJobsAsync(int? jobs)
+        => PostBody("api/build/jobs", new JobsRequest { Jobs = jobs }, PanelJson.Default.JobsRequest);
     public Task<ActionResult> MakeDirAsync(string path)
         => PostBody("api/fs/mkdir", new PathRequest { Path = path }, PanelJson.Default.PathRequest);
 

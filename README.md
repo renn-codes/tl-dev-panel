@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.2.0**
+**Version 1.3.0**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -63,7 +63,7 @@ cd /roc/claude/panel/server && sudo dotnet TeamLigma.Panel.Server.dll user-reset
 
 | Control | Command (cwd = the build directory, default `/roc/claude/claude-acore/build`) |
 |---|---|
-| Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded |
+| Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded. A thread count chosen under **CPU threads** replaces the `-j` value. |
 | Prepare (CMake) | `cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DWITH_WARNINGS=0 -DTOOLS_BUILD=all -DSCRIPTS=static -DMODULES=static` |
 | Clean | `ninja -t clean` |
 | Force Stop | Sends SIGTERM to ninja-dash, which stops ninja's process group and records the build as *Stopped* |
@@ -91,6 +91,15 @@ The panel never force-kills `worldserver`, `authserver`, `mysql` or `mysqld`:
 - Worldserver: use `server shutdown 0h0m10s`, or the Shutdown button.
 - Authserver: use Ctrl + C.
 - MySQL: type `exit`.
+
+## CPU threads
+The **CPU threads** row in the Build Console sets how many parallel jobs ninja uses. The panel detects the host's CPU layout and memory, and builds the slider range from what it finds.
+- **Range:** 1 up to the number of logical CPUs the panel may use. This respects CPU affinity and container CPU limits.
+- **Auto (default):** runs the configured command unchanged (`ninja -j$(( $(nproc) - 1 ))`), so one CPU stays free for the panel, the servers and MySQL. On a single-CPU host it uses `-j1` instead, because `-j0` would mean unlimited jobs.
+- **Manual:** untick **Auto** and drag the slider. The value replaces the command's `-j` argument from the next build on.
+- **Hints:** the row shows the CPU summary (sockets, cores, threads per core, RAM) and a recommended value: one less than the logical CPUs, capped at roughly one job per 2 GB of RAM. It warns when the setting is above what the RAM can comfortably hold, or uses every CPU.
+
+The choice is saved in `/roc/claude/panel-data/settings.json`. Operators and administrators can change it, but not while a build is running. Each build's record keeps the exact command it ran, so History shows which `-j` was used.
 
 ## ninja-dash
 `tools/ninja-dash` is the wrapper behind **Start Build**. It runs the build command and then the install command through bash, exactly as configured. It mirrors their output to the screen session and records each numbered build under `/roc/claude/panel-data/builds/<n>/`:
@@ -152,7 +161,7 @@ Over plain HTTP, passwords and session cookies cross the network unencrypted. On
 ## Troubleshooting
 - **"Build directory is not prepared":** run Prepare (CMake) first, or choose the right folder with **Change…**.
 - **"The build did not start: …":** the text after the colon is what `ninja-dash` or `screen` printed. The full output is in the Build Console terminal under *Start Build (failed)*.
-- **On a 1-CPU machine:** `$(( $(nproc) - 1 ))` is 0, and `ninja -j0` means unlimited parallel jobs. Set `BuildCommand` to `ninja -j1` there.
+- **Builds run out of memory (clang killed, "signal 9"):** lower **CPU threads** to the recommended value or below.
 - **A build shows *Interrupted*:** ninja-dash was killed without cleaning up. Start a new build.
 - **A server shows *Session open* but not *Running*:** the program exited inside its screen session. Read its console for the reason, then press Start again after the session closes.
 - **"That code is not valid" for every code:** the server's clock or your phone's clock is wrong. Authenticator codes need both to be within about 30 seconds of the real time.
