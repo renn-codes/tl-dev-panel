@@ -6,6 +6,7 @@
     <Grid RowSpacing="10">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
         <RowDefinition Height="*" />
         <RowDefinition Height="Auto" />
       </Grid.RowDefinitions>
@@ -29,9 +30,15 @@
         </StackPanel>
       </Grid>
 
-      <c:TerminalView x:Name="Term" Grid.Row="1" MaxLines="6000" />
+      <!-- how the console is connected (shown for sessions started outside the panel) -->
+      <Border x:Name="AttachBanner" Grid.Row="1" Visibility="Collapsed" CornerRadius="6" Padding="10,5" BorderThickness="1"
+              Background="#2A2F38" BorderBrush="#3D5A80">
+        <TextBlock x:Name="AttachText" FontSize="12" TextWrapping="Wrap" Foreground="{StaticResource TlTextSecondary}" />
+      </Border>
 
-      <Grid x:Name="InputRow" Grid.Row="2" ColumnSpacing="8">
+      <c:TerminalView x:Name="Term" Grid.Row="2" MaxLines="6000" />
+
+      <Grid x:Name="InputRow" Grid.Row="3" ColumnSpacing="8">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />

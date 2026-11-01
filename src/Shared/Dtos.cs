@@ -92,6 +92,12 @@ public sealed class ServerStatus
     public string? ShutdownCommand { get; set; }
     /// <summary>MySQL only: the panel will type the stored password at the prompt.</summary>
     public bool AutoLogin { get; set; }
+    /// <summary>How the console is connected: none, screen, tmux or log (read-only server log).</summary>
+    public string Attach { get; set; } = "none";
+    /// <summary>Human-readable description of the connection (e.g. an external screen session).</summary>
+    public string? AttachNote { get; set; }
+    /// <summary>Whether typed commands can reach the server.</summary>
+    public bool CanType { get; set; }
 }
 
 public sealed class LogChunk

@@ -144,8 +144,8 @@ public sealed class ApiClient
     public Task<ActionResult> StartServerAsync(string name) => Post($"api/servers/{name}/start");
     public Task<ActionResult> CtrlCAsync(string name) => Post($"api/servers/{name}/ctrlc");
     public Task<ActionResult> ClearConsoleAsync(string name) => Post($"api/servers/{name}/clear");
-    public Task<LogChunk?> ServerOutputAsync(string name, long offset)
-        => Get($"api/servers/{name}/output?offset={offset}", PanelJson.Default.LogChunk);
+    public Task<LogChunk?> ServerOutputAsync(string name, long offset, string? key = null)
+        => Get($"api/servers/{name}/output?offset={offset}" + (key != null ? $"&key={Uri.EscapeDataString(key)}" : ""), PanelJson.Default.LogChunk);
     public Task<ActionResult> SendInputAsync(string name, string text)
         => Send(new HttpRequestMessage(HttpMethod.Post, $"api/servers/{name}/input")
         {

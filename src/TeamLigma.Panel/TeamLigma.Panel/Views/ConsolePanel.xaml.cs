@@ -12,6 +12,7 @@ public enum ConsoleMode { Line, CtrlCOnly, MySql }
 public sealed partial class ConsolePanel : UserControl
 {
     long _offset = -1;
+    string? _key;
     bool _busy;
     ConsoleMode _mode;
     readonly List<string> _history = new();
@@ -58,12 +59,28 @@ public sealed partial class ConsolePanel : UserControl
             ? Windows.UI.Color.FromArgb(255, 0x4E, 0x9A, 0x55)
             : running ? Windows.UI.Color.FromArgb(255, 0xCC, 0x55, 0x00) : Windows.UI.Color.FromArgb(255, 0x55, 0x54, 0x50));
         var can = Session.CanOperate;
-        StartButton.IsEnabled = can && !running;
-        SendButton.IsEnabled = can && running;
-        ExtraButton.IsEnabled = can && running;
-        ClearButton.IsEnabled = can;
-        Input.IsEnabled = Password.IsEnabled = CtrlCBox.IsEnabled = can;
-        if (!can) Input.PlaceholderText = "Read-only: your role cannot send commands";
+        var typable = running && s.CanType;
+        // The Authserver's Ctrl + C also works without a terminal (it becomes SIGINT).
+        var ctrlC = s.ProcessRunning || running;
+        StartButton.IsEnabled = can && !running && !s.ProcessRunning;
+        SendButton.IsEnabled = can && (_mode == ConsoleMode.CtrlCOnly ? ctrlC : typable);
+        ExtraButton.IsEnabled = can && typable;
+        ClearButton.IsEnabled = can && s.Attach != "log";
+        Input.IsEnabled = Password.IsEnabled = can && (typable || !s.ProcessRunning);
+        CtrlCBox.IsEnabled = can && ctrlC;
+        Input.PlaceholderText = !can ? "Read-only: your role cannot send commands"
+            : s.ProcessRunning && !s.CanType ? "Read-only: this server isn't running in screen or tmux"
+            : _mode == ConsoleMode.MySql ? "Type a command and press Enter" : "Type a command and press Enter";
+
+        var note = s.Attach is "screen" or "tmux" or "log" ? s.AttachNote : null;
+        var external = note != null && !note.StartsWith("Panel session");
+        AttachBanner.Visibility = external ? Visibility.Visible : Visibility.Collapsed;
+        if (external)
+        {
+            AttachText.Text = note;
+            AttachBanner.BorderBrush = new SolidColorBrush(s.Attach == "log"
+                ? Windows.UI.Color.FromArgb(255, 0xA0, 0x7A, 0x2A) : Windows.UI.Color.FromArgb(255, 0x3D, 0x5A, 0x80));
+        }
         SqlButton.IsEnabled = can && running && s.InputHint != "password";
         if (s.ShutdownCommand != null)
         {
@@ -90,9 +107,10 @@ public sealed partial class ConsolePanel : UserControl
         {
             for (var i = 0; i < 6; i++)
             {
-                var chunk = await ApiClient.Instance.ServerOutputAsync(Component, _offset);
+                var chunk = await ApiClient.Instance.ServerOutputAsync(Component, _offset, _key);
                 if (chunk == null) return;
-                if (chunk.Reset) Term.Clear();
+                if (chunk.Reset || (_key != null && chunk.Key != _key)) Term.Clear();
+                _key = chunk.Key;
                 _offset = chunk.Offset;
                 Term.Append(chunk.Text);
                 if (chunk.Text.Length < 500_000) break;

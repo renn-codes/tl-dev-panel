@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.7.1**
+**Version 1.7.2**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -104,6 +104,24 @@ cd /roc/claude/panel/server && sudo dotnet TeamLigma.Panel.Server.dll user-reset
 | **Build Console** | Buttons for **Start Build**, **Prepare (CMake)**, **Clean** and **Force Stop** (asks for confirmation first). Shows live build status and a coloured terminal with scrollback. The terminal follows the running build/install, or the most recent CMake/clean task. |
 | **History** | Every build, newest first, with number, start, completion, status and compilation result. Each entry has **View Log** (full build/install log in a scrollable dialog, followed live if the build is still running) and **Remove**. |
 | **Server Monitor** | Coloured, interactive consoles. Left column: **Worldserver** (single-line commands, with a 10-second graceful shutdown button). Right column: **Authserver** (accepts Ctrl + C only) above **MySQL** (`mysql -uroot -p`; masked password entry, single-line queries, and **Run .sql script…** to upload and `source` a local file). |
+
+## Servers started outside the panel
+The Worldserver and Authserver consoles attach to whichever `worldserver`/`authserver` process is running, even one started by hand or by another user. The panel works out where the process lives from its environment:
+
+| The server is running in… | Console output | Commands / Ctrl + C |
+|---|---|---|
+| a **screen** session (any name, any user) | the session's existing output is copied in once, then the window is logged | typed into that session and window |
+| a **tmux** pane (any user) | the pane's earlier output is copied in with colours, then the pane is piped | `tmux send-keys` |
+| **no terminal** (nohup, a service, a plain shell) | read-only: the server's stdout file if redirected, else its `Server.log` / `Auth.log` | Authserver Ctrl + C is sent as `SIGINT` (the same signal). Worldserver commands aren't possible without a terminal, and the console says so. |
+
+A banner above the console describes the connection, for example *"Attached to screen session 1862.myworld, window 0, started outside the panel"*.
+
+Details:
+- **Other users' sessions:** `screen` and `tmux` sessions owned by other users are driven as that user (`runuser`), with helper files in `/run/tl-panel/<user>/`.
+- **Restarts:** attachments are remembered in `panel-data/consoles/attached.json`, so restarting the panel doesn't copy the earlier output again.
+- **Start:** Start is disabled while the server is already running.
+- **Copied output:** the earlier output that `screen` hands over is plain text wrapped at the window width, and its box-drawing characters may come out garbled. Output after attaching is unaffected.
+- **Buffered output:** a server writing to a file instead of a terminal may buffer its output, so lines can appear in bursts.
 
 ## Commands the panel runs
 

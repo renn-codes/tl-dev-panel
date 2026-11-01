@@ -9,7 +9,7 @@
     </Grid.RowDefinitions>
     <StackPanel Spacing="2">
       <TextBlock Style="{StaticResource TlPageTitle}" Text="Server Monitor" />
-      <TextBlock Foreground="{StaticResource TlTextMuted}" Text="Live consoles for the test realm. Servers run from /roc/claude/live/bin inside detached screen sessions." />
+      <TextBlock Foreground="{StaticResource TlTextMuted}" Text="Live consoles for the test realm. They attach to running servers whether the panel started them or not (screen, tmux, or read-only logs)." />
     </StackPanel>
     <Grid Grid.Row="1" ColumnSpacing="16">
       <Grid.ColumnDefinitions>

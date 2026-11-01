@@ -50,6 +50,19 @@ public static class Shell
         return set;
     }
 
+    /// <summary>The full id ("pid.name") of the root screen session with this name, if any.</summary>
+    public static async Task<string?> ScreenIdAsync(string name)
+    {
+        var (_, output) = await RunAsync(ScreenExe, new[] { "-ls" });
+        foreach (var line in output.Split('\n'))
+        {
+            var id = line.Trim().Split('\t', ' ')[0];
+            var dot = id.IndexOf('.');
+            if (dot > 0 && char.IsDigit(id[0]) && id[(dot + 1)..] == name && !line.Contains("(Dead")) return id;
+        }
+        return null;
+    }
+
     /// <summary>
     /// Types text into a screen session window. The text is pasted through a
     /// screen buffer file so that ^ and \ are never interpreted by screen.

@@ -165,7 +165,7 @@ api.MapGet("/builds/{id:int}/log", (int id, long? offset, bool? full, BuildServi
 api.MapGet("/build/console", (string? key, long? offset, int? build, BuildService b) => b.Console(key, offset ?? -1, build));
 api.MapGet("/build/settings", (BuildService b) => b.Settings());
 api.MapGet("/servers", (ConsoleService c) => c.StatusAsync());
-api.MapGet("/servers/{name}/output", (string name, long? offset, ConsoleService c) => c.Output(name, offset ?? -1));
+api.MapGet("/servers/{name}/output", (string name, long? offset, string? key, ConsoleService c) => c.OutputAsync(name, offset ?? -1, key));
 
 var op = api.MapGroup("").RequireAuthorization("operate");
 op.MapDelete("/builds/{id:int}", (HttpContext ctx, int id, BuildService b, AuthService a) => Logged(ctx, a, $"remove build #{id}", b.Delete(id)));
