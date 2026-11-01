@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.4.0**
+**Version 1.5.0**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -12,6 +12,17 @@ The panel has two parts:
 nginx serves both on port **26767**.
 
 ---
+
+## Loading screen
+While the WebAssembly app downloads and starts, the panel shows a dark, fantasy-MMO-styled loading screen:
+- **Look:** a stone backdrop with drifting embers, an original gold crest (shield, sword, smithing hammer and gear inside a turning rune ring), the title in Cinzel Decorative, and an ornate gold-framed loading bar.
+- **Tips:** rotating "Tip:" lines about using the panel.
+- **Progress is real:** the bar follows the Uno bootstrapper's resource downloads ("Gathering resources · 46 / 52"), then "Waking the runtime" while .NET starts. Once the app has drawn its first screen it fills, says "Entering the realm", and fades away.
+- **Accessibility:** animations are switched off when the browser asks for reduced motion.
+
+The files are `src/TeamLigma.Panel/TeamLigma.Panel/Platforms/WebAssembly/index.html` (markup and crest) and `Platforms/WebAssembly/loading/` (`loading.css`, `loading.js`, fonts). The page is selected with `WasmShellIndexHtmlPath` in the app's `.csproj`. The loading files are published as app content, because the Uno build rewrites `./` paths in `index.html` into its package folder.
+
+The artwork is original and inspired by the genre; it uses no Blizzard assets. Fonts: [Cinzel](https://github.com/NDISCOVER/Cinzel) and Cinzel Decorative, SIL Open Font License 1.1 (`loading/fonts/OFL.txt`).
 
 ## Accounts & sign-in
 Every page and API call requires a signed-in account. Accounts can be protected with an **authenticator app** (TOTP: Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden, Aegis and similar).

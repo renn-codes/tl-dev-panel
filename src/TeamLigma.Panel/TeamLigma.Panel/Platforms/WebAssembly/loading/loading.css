@@ -1,0 +1,368 @@
+/* Team Ligma Development Panel - loading screen (shown while the Uno WebAssembly runtime loads).
+   Fantasy-MMO styling: stone, gold filigree, drifting embers and a glowing loading bar. */
+
+@font-face {
+    font-family: "Cinzel Decorative";
+    src: url("./fonts/cinzel-decorative-latin-700-normal.woff2") format("woff2");
+    font-weight: 700;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Cinzel";
+    src: url("./fonts/cinzel-latin-600-normal.woff2") format("woff2");
+    font-weight: 600;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Cinzel";
+    src: url("./fonts/cinzel-latin-700-normal.woff2") format("woff2");
+    font-weight: 700;
+    font-display: swap;
+}
+
+:root {
+    --tl-bg-deep: #050608;
+    --tl-bg-warm: #1a120b;
+    --tl-gold-light: #fff1c1;
+    --tl-gold: #e1b95e;
+    --tl-gold-mid: #b38634;
+    --tl-gold-dark: #5c3f12;
+    --tl-ember: #ff8a3d;
+    --tl-accent: #cc5500;
+    --tl-text: #e9dcc0;
+    --tl-text-dim: #a8977a;
+}
+
+html, body {
+    background: var(--tl-bg-deep);
+}
+
+/* Uno's built-in loader stays in the DOM (it receives download progress) but is invisible. */
+.uno-loader {
+    background: transparent !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+#tl-loading {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: max(5vh, 24px) 16px max(6vh, 28px);
+    box-sizing: border-box;
+    background: var(--tl-bg-deep);
+    color: var(--tl-text);
+    font-family: "Cinzel", Georgia, "Times New Roman", serif;
+    transition: opacity 0.8s ease, visibility 0.8s;
+    user-select: none;
+}
+
+#tl-loading.tl-done {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* ---- backdrop layers ---- */
+
+.tl-bg {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 80% 55% at 50% 42%, rgba(120, 52, 14, 0.38), transparent 70%),
+        radial-gradient(ellipse 120% 70% at 50% 110%, rgba(204, 85, 0, 0.22), transparent 60%),
+        linear-gradient(180deg, #07080c 0%, #0d0b0a 45%, var(--tl-bg-warm) 100%);
+}
+
+/* stone grain from an inline SVG noise texture */
+.tl-bg::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    opacity: 0.22;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.6  0 0 0 0 0.5  0 0 0 0 0.4  0 0 0 0.9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+.tl-glow {
+    position: absolute;
+    left: 50%;
+    top: 40%;
+    width: 70vmin;
+    height: 70vmin;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 138, 61, 0.18), rgba(204, 85, 0, 0.06) 45%, transparent 70%);
+    animation: tl-breathe 5s ease-in-out infinite;
+}
+
+.tl-vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.75) 100%);
+    pointer-events: none;
+}
+
+/* ---- embers ---- */
+
+.tl-embers {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.tl-ember {
+    position: absolute;
+    bottom: -12px;
+    left: var(--x);
+    width: var(--s);
+    height: var(--s);
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffe2a8 0%, var(--tl-ember) 45%, rgba(204, 85, 0, 0) 70%);
+    box-shadow: 0 0 6px 2px rgba(255, 138, 61, 0.45);
+    opacity: 0;
+    animation: tl-rise var(--d) linear var(--delay) infinite;
+}
+
+@keyframes tl-rise {
+    0%   { transform: translate(0, 0) scale(1); opacity: 0; }
+    10%  { opacity: var(--o); }
+    70%  { opacity: calc(var(--o) * 0.8); }
+    100% { transform: translate(var(--drift), -105vh) scale(0.4); opacity: 0; }
+}
+
+/* ---- crest and title ---- */
+
+.tl-center {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 0;
+}
+
+.tl-crest {
+    width: clamp(150px, 26vmin, 260px);
+    height: auto;
+    filter: drop-shadow(0 0 18px rgba(255, 138, 61, 0.25)) drop-shadow(0 6px 10px rgba(0, 0, 0, 0.8));
+    animation: tl-float 6s ease-in-out infinite;
+}
+
+.tl-ring {
+    transform-origin: 120px 120px;
+    animation: tl-spin 60s linear infinite;
+}
+
+.tl-core {
+    animation: tl-flicker 3.2s ease-in-out infinite;
+}
+
+.tl-title {
+    margin: 10px 0 0;
+    font-family: "Cinzel Decorative", "Cinzel", Georgia, serif;
+    font-weight: 700;
+    font-size: clamp(34px, 6.2vw, 72px);
+    letter-spacing: 0.06em;
+    line-height: 1.05;
+    text-align: center;
+    background: linear-gradient(180deg, var(--tl-gold-light) 0%, var(--tl-gold) 42%, var(--tl-gold-mid) 62%, #f2d58c 78%, var(--tl-gold-dark) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 2px 0 #2a1a06) drop-shadow(0 0 14px rgba(225, 185, 94, 0.35)) drop-shadow(0 6px 8px rgba(0, 0, 0, 0.9));
+}
+
+.tl-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: clamp(13px, 1.6vw, 18px);
+    font-weight: 600;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--tl-text-dim);
+    text-shadow: 0 2px 4px #000;
+}
+
+.tl-rule {
+    display: block;
+    width: clamp(28px, 7vw, 90px);
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--tl-gold), transparent);
+    position: relative;
+}
+
+.tl-rule::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    background: var(--tl-gold);
+    transform: translate(-50%, -50%) rotate(45deg);
+    box-shadow: 0 0 6px rgba(225, 185, 94, 0.7);
+}
+
+/* ---- footer: tip, loading bar, status ---- */
+
+.tl-footer {
+    position: relative;
+    width: min(780px, 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.tl-tip {
+    margin: 0;
+    min-height: 2.8em;
+    max-width: 640px;
+    text-align: center;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(13px, 1.5vw, 16px);
+    line-height: 1.4;
+    color: var(--tl-text);
+    text-shadow: 0 1px 3px #000;
+    transition: opacity 0.6s ease;
+}
+
+.tl-tip.tl-fade {
+    opacity: 0;
+}
+
+.tl-tip-label {
+    font-family: "Cinzel", Georgia, serif;
+    font-weight: 700;
+    color: var(--tl-gold);
+    letter-spacing: 0.06em;
+}
+
+.tl-bar {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.tl-bar-frame {
+    position: relative;
+    flex: 1;
+    height: 24px;
+    border-radius: 3px;
+    padding: 3px;
+    box-sizing: border-box;
+    /* gold metallic frame */
+    background:
+        linear-gradient(#120b06, #120b06) padding-box,
+        linear-gradient(180deg, var(--tl-gold-light), var(--tl-gold) 30%, var(--tl-gold-dark) 55%, var(--tl-gold-mid) 80%, var(--tl-gold-light)) border-box;
+    border: 2px solid transparent;
+    box-shadow:
+        0 0 0 1px #000,
+        0 4px 14px rgba(0, 0, 0, 0.8),
+        inset 0 2px 6px rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+}
+
+.tl-bar-fill {
+    position: relative;
+    height: 100%;
+    width: 0%;
+    border-radius: 1px;
+    background: linear-gradient(180deg, #ffcf8a 0%, #ff9a3d 22%, var(--tl-accent) 60%, #7a2a04 100%);
+    box-shadow: 0 0 12px 2px rgba(255, 120, 40, 0.55), inset 0 1px 0 rgba(255, 240, 200, 0.6);
+    transition: width 0.25s ease-out;
+}
+
+/* bright leading edge */
+.tl-bar-fill::after {
+    content: "";
+    position: absolute;
+    right: -2px;
+    top: -3px;
+    bottom: -3px;
+    width: 10px;
+    background: radial-gradient(ellipse at center, rgba(255, 240, 200, 0.95), rgba(255, 150, 60, 0) 70%);
+    filter: blur(1px);
+}
+
+.tl-bar-sheen {
+    position: absolute;
+    inset: 3px;
+    background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.16) 50%, transparent 65%);
+    background-size: 220% 100%;
+    animation: tl-sheen 2.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.tl-cap {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex: none;
+    transform: rotate(45deg);
+    background: linear-gradient(135deg, var(--tl-gold-light), var(--tl-gold) 40%, var(--tl-gold-dark));
+    box-shadow: 0 0 0 1px #000, 0 0 10px rgba(225, 185, 94, 0.35);
+    z-index: 1;
+}
+
+.tl-cap::after {
+    content: "";
+    position: absolute;
+    inset: 5px;
+    background: radial-gradient(circle, #ffb066, var(--tl-accent));
+    box-shadow: 0 0 6px rgba(255, 138, 61, 0.9);
+}
+
+.tl-cap-left { margin-right: -9px; }
+.tl-cap-right { margin-left: -9px; }
+
+.tl-status {
+    width: calc(100% - 24px);
+    display: flex;
+    justify-content: space-between;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--tl-text-dim);
+    text-shadow: 0 1px 3px #000;
+}
+
+#tl-pct {
+    color: var(--tl-gold);
+    font-variant-numeric: tabular-nums;
+}
+
+#tl-loading.tl-error #tl-phase {
+    color: #ff7b6b;
+    text-transform: none;
+    letter-spacing: 0.02em;
+}
+
+/* ---- animations ---- */
+
+@keyframes tl-spin { to { transform: rotate(360deg); } }
+@keyframes tl-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes tl-breathe { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
+@keyframes tl-flicker { 0%, 100% { opacity: 0.85; } 45% { opacity: 1; } 60% { opacity: 0.7; } }
+@keyframes tl-sheen { 0% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+
+@media (max-height: 560px) {
+    .tl-crest { width: 120px; }
+    .tl-tip { min-height: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tl-ring, .tl-crest, .tl-glow, .tl-core, .tl-bar-sheen { animation: none; }
+    .tl-embers { display: none; }
+    #tl-loading { transition: none; }
+}
