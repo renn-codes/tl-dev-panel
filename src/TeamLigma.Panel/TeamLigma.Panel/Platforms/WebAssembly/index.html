@@ -10,6 +10,7 @@
     <link rel="shortcut icon" href="./loading/favicon.ico" />
 
     <!-- Themed loading screen (loads before the Uno runtime) -->
+    <link rel="preload" href="./loading/emblem.webp" as="image" type="image/webp" />
     <link rel="preload" href="./loading/fonts/cinzel-decorative-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="./loading/fonts/cinzel-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" type="text/css" href="./loading/loading.css" />
@@ -40,93 +41,9 @@
         <div class="tl-vignette" aria-hidden="true"></div>
 
         <main class="tl-center">
-            <svg class="tl-crest" viewBox="0 0 240 240" aria-hidden="true">
-                <defs>
-                    <linearGradient id="tlGold" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0" stop-color="#fff1c1" />
-                        <stop offset="0.35" stop-color="#e8c36a" />
-                        <stop offset="0.7" stop-color="#a87a2c" />
-                        <stop offset="1" stop-color="#5c3f12" />
-                    </linearGradient>
-                    <linearGradient id="tlSteel" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0" stop-color="#e9edf2" />
-                        <stop offset="0.5" stop-color="#9aa4b1" />
-                        <stop offset="1" stop-color="#4d5560" />
-                    </linearGradient>
-                    <radialGradient id="tlShieldFill" cx="0.5" cy="0.35" r="0.75">
-                        <stop offset="0" stop-color="#3a1a0a" />
-                        <stop offset="0.6" stop-color="#1c0d06" />
-                        <stop offset="1" stop-color="#0b0604" />
-                    </radialGradient>
-                    <radialGradient id="tlCore" cx="0.5" cy="0.5" r="0.5">
-                        <stop offset="0" stop-color="#ffb066" stop-opacity="0.9" />
-                        <stop offset="0.45" stop-color="#cc5500" stop-opacity="0.45" />
-                        <stop offset="1" stop-color="#cc5500" stop-opacity="0" />
-                    </radialGradient>
-                    <filter id="tlEngrave" x="-10%" y="-10%" width="120%" height="120%">
-                        <feDropShadow dx="0" dy="2" stdDeviation="1.6" flood-color="#000" flood-opacity="0.85" />
-                    </filter>
-                </defs>
-
-                <!-- rune ring (rotates) -->
-                <g class="tl-ring">
-                    <circle cx="120" cy="120" r="111" fill="none" stroke="url(#tlGold)" stroke-width="2.5" />
-                    <circle cx="120" cy="120" r="101" fill="none" stroke="url(#tlGold)" stroke-width="1" stroke-opacity="0.7" />
-                    <g stroke="#d9b45c" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.85">
-                        <!-- 12 original rune marks between the rings -->
-                        <path d="M120 12 v8 M117 15 l3 3 l3 -3" />
-                        <path d="M117 13 l3 7 l3 -7" transform="rotate(30 120 120)" />
-                        <path d="M120 12 v8 M116 16 h8" transform="rotate(60 120 120)" />
-                        <path d="M118 12 l4 8 M122 12 l-4 8" transform="rotate(90 120 120)" />
-                        <path d="M120 12 v8 M117 19 l3 -3 l3 3" transform="rotate(120 120 120)" />
-                        <path d="M117 13 h6 M120 13 v7" transform="rotate(150 120 120)" />
-                        <path d="M120 12 v8 M117 15 l3 3 l3 -3" transform="rotate(180 120 120)" />
-                        <path d="M120 12 v8 M116 16 h8" transform="rotate(210 120 120)" />
-                        <path d="M118 12 l4 8 M122 12 l-4 8" transform="rotate(240 120 120)" />
-                        <path d="M120 12 v8 M117 19 l3 -3 l3 3" transform="rotate(270 120 120)" />
-                        <path d="M117 13 h6 M120 13 v7" transform="rotate(300 120 120)" />
-                        <path d="M118 13 l2 7 l2 -7" transform="rotate(330 120 120)" />
-                    </g>
-                    <g fill="url(#tlGold)">
-                        <circle cx="120" cy="9" r="3" />
-                        <circle cx="231" cy="120" r="3" />
-                        <circle cx="120" cy="231" r="3" />
-                        <circle cx="9" cy="120" r="3" />
-                    </g>
-                </g>
-
-                <!-- ember core glow behind the shield -->
-                <circle class="tl-core" cx="120" cy="122" r="78" fill="url(#tlCore)" />
-
-                <!-- gear -->
-                <g class="tl-gear" transform="translate(120 122)" filter="url(#tlEngrave)">
-                    <path fill="none" stroke="url(#tlGold)" stroke-width="3"
-                          d="M-6 -62 h12 l3 11 a52 52 0 0 1 12 5 l10 -6 l9 9 l-6 10 a52 52 0 0 1 5 12 l11 3 v12 l-11 3 a52 52 0 0 1 -5 12 l6 10 l-9 9 l-10 -6 a52 52 0 0 1 -12 5 l-3 11 h-12 l-3 -11 a52 52 0 0 1 -12 -5 l-10 6 l-9 -9 l6 -10 a52 52 0 0 1 -5 -12 l-11 -3 v-12 l11 -3 a52 52 0 0 1 5 -12 l-6 -10 l9 -9 l10 6 a52 52 0 0 1 12 -5 z" />
-                </g>
-
-                <!-- shield -->
-                <g filter="url(#tlEngrave)">
-                    <path d="M120 58 L168 74 Q170 132 120 178 Q70 132 72 74 Z" fill="url(#tlShieldFill)" stroke="url(#tlGold)" stroke-width="4" stroke-linejoin="round" />
-                    <path d="M120 66 L160 79 Q161 128 120 168 Q79 128 80 79 Z" fill="none" stroke="#e8c36a" stroke-opacity="0.45" stroke-width="1.2" />
-                </g>
-
-                <!-- crossed sword and hammer -->
-                <g filter="url(#tlEngrave)">
-                    <g transform="rotate(-38 120 118)">
-                        <path d="M117 64 L120 56 L123 64 L123 140 L117 140 Z" fill="url(#tlSteel)" />
-                        <path d="M120 60 V138" stroke="#ffffff" stroke-opacity="0.5" stroke-width="0.8" />
-                        <rect x="106" y="140" width="28" height="5" rx="2" fill="url(#tlGold)" />
-                        <rect x="117.5" y="145" width="5" height="16" fill="#5a3416" />
-                        <circle cx="120" cy="164" r="4" fill="url(#tlGold)" />
-                    </g>
-                    <g transform="rotate(38 120 118)">
-                        <rect x="117.5" y="84" width="5" height="78" rx="1.5" fill="#6b3d19" />
-                        <path d="M104 70 h32 a3 3 0 0 1 3 3 v14 a3 3 0 0 1 -3 3 h-32 a3 3 0 0 1 -3 -3 v-14 a3 3 0 0 1 3 -3 z" fill="url(#tlSteel)" stroke="#2b2f35" stroke-width="1" />
-                        <rect x="101" y="77" width="38" height="3" fill="url(#tlGold)" />
-                        <circle cx="120" cy="164" r="3.5" fill="url(#tlGold)" />
-                    </g>
-                </g>
-            </svg>
+            <div class="tl-crest" aria-hidden="true">
+                <img class="tl-emblem" src="./loading/emblem.webp" alt="" width="468" height="468" decoding="async" />
+            </div>
 
             <h1 class="tl-title">Team Ligma</h1>
             <div class="tl-subtitle"><span class="tl-rule" aria-hidden="true"></span>Development Panel<span class="tl-rule" aria-hidden="true"></span></div>
