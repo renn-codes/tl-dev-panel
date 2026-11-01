@@ -26,11 +26,15 @@ public sealed partial class BuildDash : UserControl
             OverallBar.Value = 0;
             OverallText.Text = "";
             StepText.Text = "Start a build from the Build Console.";
+            DirText.Text = "—";
+            ExternalPill.Visibility = Visibility.Collapsed;
             SetObjects(Array.Empty<BuildObject>());
             return;
         }
         var active = b.Phase is "building" or "installing";
         NumberText.Text = $"#{b.Id}";
+        DirText.Text = b.BuildDir ?? "—";
+        ExternalPill.Visibility = b.Source == BuildSources.External ? Visibility.Visible : Visibility.Collapsed;
         StartedText.Text = Fmt.Time(b.Started);
         ElapsedText.Text = Fmt.Duration(b.Started, b.Ended);
         StatusText.Text = Fmt.PhaseLabel(b.Phase);
@@ -46,7 +50,9 @@ public sealed partial class BuildDash : UserControl
         };
         OverallBar.Value = overall;
         OverallBar.Fill = Fmt.PhaseBrush(b.Phase == "completed" ? "completed" : b.Phase is "failed" or "interrupted" ? "failed" : "building");
-        OverallText.Text = b.Total > 0 ? $"{b.Done:N0} / {b.Total:N0} steps · {overall * 100:0.0}%" : $"{overall * 100:0.0}%";
+        OverallText.Text = b.Total > 0
+            ? (b.TotalIsEstimate ? $"{b.Done:N0} of up to {b.Total:N0} steps (estimate) · {overall * 100:0.0}%" : $"{b.Done:N0} / {b.Total:N0} steps · {overall * 100:0.0}%")
+            : b.Done > 0 ? $"{b.Done:N0} steps" : $"{overall * 100:0.0}%";
 
         var showInstall = b.Phase == "installing" || b.InstallDone > 0;
         InstallRow.Visibility = showInstall ? Visibility.Visible : Visibility.Collapsed;

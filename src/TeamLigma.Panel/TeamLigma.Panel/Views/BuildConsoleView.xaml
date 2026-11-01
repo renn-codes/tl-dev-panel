@@ -87,7 +87,13 @@
 
     <Border Grid.Row="2" Style="{StaticResource TlCardStyle}">
       <StackPanel Spacing="12">
-        <TextBlock Style="{StaticResource TlCardTitle}" Text="BUILD STATUS" />
+        <Grid ColumnSpacing="12">
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+          <TextBlock Style="{StaticResource TlCardTitle}" Text="BUILD STATUS" VerticalAlignment="Center" />
+          <TextBlock x:Name="RunningCount" Grid.Column="1" Style="{StaticResource TlLabel}" VerticalAlignment="Center" />
+          <ComboBox x:Name="BuildPicker" Grid.Column="2" MinWidth="340" SelectionChanged="OnBuildPicked"
+                    ToolTipService.ToolTip="Switch between builds that are running at the same time" />
+        </Grid>
         <v:BuildDash x:Name="Dash" MaxObjects="8" />
       </StackPanel>
     </Border>

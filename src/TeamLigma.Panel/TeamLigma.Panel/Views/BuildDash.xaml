@@ -30,6 +30,15 @@
       </StackPanel>
     </Grid>
 
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <TextBlock Style="{StaticResource TlLabel}" Text="DIRECTORY" VerticalAlignment="Center" />
+      <TextBlock x:Name="DirText" Style="{StaticResource TlMonoText}" VerticalAlignment="Center" Text="—" />
+      <Border x:Name="ExternalPill" Visibility="Collapsed" CornerRadius="10" Padding="9,2" Background="#3D5A80" VerticalAlignment="Center"
+              ToolTipService.ToolTip="Started outside the panel. Its own output can't be captured; finished steps come from .ninja_log.">
+        <TextBlock Text="External" FontSize="11.5" FontWeight="SemiBold" Foreground="White" />
+      </Border>
+    </StackPanel>
+
     <StackPanel Spacing="6">
       <Grid>
         <TextBlock Style="{StaticResource TlLabel}" Text="OVERALL PROGRESS" />

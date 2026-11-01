@@ -18,6 +18,11 @@ public sealed class BuildStatus
 {
     public int Id { get; set; }
     public int? Pid { get; set; }
+    /// <summary>"panel" or "external" (see BuildSources).</summary>
+    public string Source { get; set; } = BuildSources.Panel;
+    public string? BuildDir { get; set; }
+    /// <summary>True when Total is an estimate (external builds: total commands, not just out-of-date ones).</summary>
+    public bool TotalIsEstimate { get; set; }
     public string Phase { get; set; } = "unknown";   // building|installing|completed|failed|stopped|interrupted
     public string Step { get; set; } = "";
     public string? Command { get; set; }
@@ -107,6 +112,8 @@ public sealed class TaskState
 public sealed class Overview
 {
     public BuildStatus? Build { get; set; }
+    /// <summary>All builds running right now (panel and external), newest first.</summary>
+    public List<BuildStatus> Running { get; set; } = new();
     public SystemSnapshot System { get; set; } = new();
     public List<ServerStatus> Servers { get; set; } = new();
     public TaskState Task { get; set; } = new();
@@ -277,4 +284,14 @@ public sealed class JobsRequest
 {
     /// <summary>null = automatic (the configured nproc - 1 command).</summary>
     public int? Jobs { get; set; }
+}
+
+// ---------------- Concurrent / external builds (v1.4.0) ----------------
+
+public static class BuildSources
+{
+    /// <summary>Started from the panel (Start Build, through ninja-dash).</summary>
+    public const string Panel = "panel";
+    /// <summary>A ninja process started outside the panel, detected and observed by it.</summary>
+    public const string External = "external";
 }

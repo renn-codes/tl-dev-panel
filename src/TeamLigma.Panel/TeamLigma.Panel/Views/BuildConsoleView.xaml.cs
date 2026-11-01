@@ -16,6 +16,7 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         InitializeComponent();
         _timer.Tick += async (_, _) => await PollConsole();
         _jobsSave.Tick += async (_, _) => await SaveJobs();
+        BuildSelection.Changed += () => DispatcherQueue.TryEnqueue(OnSelectionChanged);
     }
 
     public void SetActive(bool active)
@@ -29,17 +30,20 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
     {
         _last = o;
         if (!_active) return;
-        Dash.Update(o.Build);
-        var building = o.Build?.Phase is "building" or "installing";
+        UpdatePicker(o);
+        var shown = BuildSelection.Resolve(o);
+        Dash.Update(shown);
+        // Only a build in the *current* build directory blocks Start/Prepare/Clean here.
+        var busyHere = o.Running.Any(b => SameDir(b.BuildDir, _settings?.BuildDir));
         var taskRunning = o.Task.Running;
         var can = Session.CanOperate;
-        StartButton.IsEnabled = can && !building && !taskRunning;
-        ConfigureButton.IsEnabled = can && !building && !taskRunning;
-        CleanButton.IsEnabled = can && !building && !taskRunning;
-        StopButton.IsEnabled = can && building;
-        BrowseButton.IsEnabled = can && !building && !taskRunning;
-        JobsSlider.IsEnabled = can && !building && JobsAuto.IsChecked != true;
-        JobsAuto.IsEnabled = can && !building;
+        StartButton.IsEnabled = can && !busyHere && !taskRunning;
+        ConfigureButton.IsEnabled = can && !busyHere && !taskRunning;
+        CleanButton.IsEnabled = can && !busyHere && !taskRunning;
+        StopButton.IsEnabled = can && shown != null && o.Running.Any(b => b.Id == shown.Id);
+        BrowseButton.IsEnabled = can && !taskRunning;
+        JobsSlider.IsEnabled = can && JobsAuto.IsChecked != true;
+        JobsAuto.IsEnabled = can;
         if (++_settingsTick % 5 == 0) _ = RefreshBuildDir(); // a Prepare run can make the directory ready
         TaskText.Text = !can ? "Read-only: your role can watch builds but not run them."
             : taskRunning ? $"Running: {o.Task.Name}…"
@@ -151,6 +155,56 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         await RefreshBuildDir();
     }
 
+    static bool SameDir(string? a, string? b)
+        => a != null && b != null && a.TrimEnd('/') == b.TrimEnd('/');
+
+    string _pickerSignature = "";
+    bool _updatingPicker;
+
+    /// <summary>Dropdown of running builds; rebuilt only when the set of running builds changes.</summary>
+    void UpdatePicker(Overview o)
+    {
+        RunningCount.Text = o.Running.Count switch { 0 => "no builds running", 1 => "1 build running", var n => $"{n} builds running" };
+        var sig = string.Join(",", o.Running.Select(b => b.Id)) + "|" + o.Build?.Id;
+        _updatingPicker = true;
+        try
+        {
+            if (sig != _pickerSignature)
+            {
+                _pickerSignature = sig;
+                BuildPicker.Items.Clear();
+                foreach (var b in o.Running)
+                    BuildPicker.Items.Add(new ComboBoxItem { Content = $"{BuildSelection.Label(b)} · {Fmt.PhaseLabel(b.Phase)}", Tag = b.Id });
+                if (o.Running.Count == 0 && o.Build != null)
+                    BuildPicker.Items.Add(new ComboBoxItem { Content = $"#{o.Build.Id} · latest build ({Fmt.PhaseLabel(o.Build.Phase)})", Tag = o.Build.Id });
+            }
+            var want = BuildSelection.Resolve(o)?.Id;
+            var index = -1;
+            for (var i = 0; i < BuildPicker.Items.Count; i++)
+                if (BuildPicker.Items[i] is ComboBoxItem { Tag: int t } && t == want) index = i;
+            if (BuildPicker.SelectedIndex != index) BuildPicker.SelectedIndex = index;
+            BuildPicker.IsEnabled = o.Running.Count > 1;
+        }
+        finally { _updatingPicker = false; }
+    }
+
+    void OnBuildPicked(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingPicker || BuildPicker.SelectedItem is not ComboBoxItem { Tag: int id }) return;
+        BuildSelection.Select(id);
+    }
+
+    void OnSelectionChanged()
+    {
+        if (_last == null) return;
+        OnOverview(_last);
+        _ = PollConsole(); // switch the terminal right away
+    }
+
+    /// <summary>The build whose log the terminal follows: the selected running build, or null
+    /// (then the server shows a running CMake/clean task, else the latest build).</summary>
+    int? ConsoleBuild => _last is { Running.Count: > 0 } o ? BuildSelection.Resolve(o)?.Id : null;
+
     async Task PollConsole()
     {
         if (_busy) return;
@@ -159,7 +213,7 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         {
             for (var guard = 0; guard < 8; guard++)
             {
-                var chunk = await ApiClient.Instance.BuildConsoleAsync(_key, _offset);
+                var chunk = await ApiClient.Instance.BuildConsoleAsync(_key, _offset, ConsoleBuild);
                 if (chunk == null) return;
                 if (chunk.Reset || chunk.Key != _key) Term.Clear();
                 _key = chunk.Key;
@@ -203,7 +257,10 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
 
     async void OnStop(object sender, RoutedEventArgs e)
     {
-        var id = _last?.Build?.Id;
+        var target = _last != null ? BuildSelection.Resolve(_last) : null;
+        if (target == null) return;
+        var id = target.Id;
+        var external = target.Source == BuildSources.External;
         var dlg = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -212,7 +269,10 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
             {
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 460,
-                Text = $"Build #{id} will be terminated immediately. Objects being compiled right now are discarded and the build is recorded as Stopped. A partially installed server may be left in /roc/claude/live.",
+                Text = (external
+                    ? $"Build #{id} was started outside the panel (ninja pid {target.Pid}, in {target.BuildDir}). It will be sent SIGTERM, which stops it as if Ctrl + C were pressed in its terminal. "
+                    : $"Build #{id} in {target.BuildDir} will be terminated immediately. ")
+                    + "Objects being compiled right now are discarded and the build is recorded as Stopped. A partially installed server may be left in /roc/claude/live.",
             },
             PrimaryButtonText = "Force Stop",
             CloseButtonText = "Keep Building",
@@ -220,6 +280,6 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         };
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
         StopButton.IsEnabled = false;
-        Shell.Notify(await ApiClient.Instance.StopBuildAsync());
+        Shell.Notify(await ApiClient.Instance.StopBuildAsync(id));
     }
 }

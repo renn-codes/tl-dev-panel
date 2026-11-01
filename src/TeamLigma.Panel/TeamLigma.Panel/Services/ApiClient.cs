@@ -131,11 +131,11 @@ public sealed class ApiClient
         => Get($"api/builds/{id}/log?offset={offset}&full={(full ? "true" : "false")}", PanelJson.Default.LogChunk);
     public Task<ActionResult> DeleteBuildAsync(int id) => Send(new HttpRequestMessage(HttpMethod.Delete, $"api/builds/{id}"));
     public Task<ActionResult> StartBuildAsync() => Post("api/build/start");
-    public Task<ActionResult> StopBuildAsync() => Post("api/build/stop");
+    public Task<ActionResult> StopBuildAsync(int? id) => Post(id is { } i ? $"api/build/stop?id={i}" : "api/build/stop");
     public Task<ActionResult> ConfigureAsync() => Post("api/build/configure");
     public Task<ActionResult> CleanAsync() => Post("api/build/clean");
-    public Task<LogChunk?> BuildConsoleAsync(string? key, long offset)
-        => Get($"api/build/console?key={Uri.EscapeDataString(key ?? "")}&offset={offset}", PanelJson.Default.LogChunk);
+    public Task<LogChunk?> BuildConsoleAsync(string? key, long offset, int? build = null)
+        => Get($"api/build/console?key={Uri.EscapeDataString(key ?? "")}&offset={offset}" + (build is { } b ? $"&build={b}" : ""), PanelJson.Default.LogChunk);
 
     public Task<List<ServerStatus>?> ServersAsync() => Get("api/servers", PanelJson.Default.ListServerStatus);
     public Task<ActionResult> StartServerAsync(string name) => Post($"api/servers/{name}/start");

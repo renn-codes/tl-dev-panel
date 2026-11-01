@@ -61,7 +61,7 @@ public sealed partial class HistoryView : UserControl, IPanelPage
             var builds = await ApiClient.Instance.BuildsAsync();
             if (builds == null) return;
             builds = builds.OrderByDescending(b => b.Started ?? DateTimeOffset.MinValue).ThenByDescending(b => b.Id).ToList();
-            var sig = string.Join("|", builds.Select(b => $"{b.Id}:{b.Phase}:{b.Ended}:{b.Result}:{(b.Phase is "building" or "installing" ? b.Done : 0)}"));
+            var sig = string.Join("|", builds.Select(b => $"{b.Id}:{b.Phase}:{b.Ended}:{b.Result}:{(b.Phase is "building" or "installing" ? $"{b.Done}/{b.Total}" : "")}"));
             if (!force && sig == _signature) return;
             _signature = sig;
             Subtitle.Text = $"{builds.Count} recorded build(s), newest first.";
@@ -77,7 +77,12 @@ public sealed partial class HistoryView : UserControl, IPanelPage
         var res = Application.Current.Resources;
         var g = new Grid { Padding = new Thickness(18, 12, 18, 12), BorderBrush = (Brush)res["TlCardBorder"], BorderThickness = new Thickness(0, 0, 0, 1) };
         Layout(g);
-        Cell(g, 0, new TextBlock { Text = $"#{b.Id}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 16, Foreground = (Brush)res["TlText"] });
+        var idCell = new StackPanel { Spacing = 2 };
+        idCell.Children.Add(new TextBlock { Text = $"#{b.Id}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 16, Foreground = (Brush)res["TlText"] });
+        if (b.Source == BuildSources.External)
+            idCell.Children.Add(new TextBlock { Text = "external", FontSize = 11, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x8C, 0xB8, 0xEE)) });
+        ToolTipService.SetToolTip(idCell, $"{(b.Source == BuildSources.External ? "Started outside the panel" : "Started from the panel")}\n{b.BuildDir}\n{b.Command}");
+        Cell(g, 0, idCell);
         Cell(g, 1, new TextBlock { Text = Fmt.Time(b.Started), Style = (Style)res["TlMonoText"] });
         var running = b.Phase is "building" or "installing";
         Cell(g, 2, new TextBlock { Text = running ? "in progress…" : Fmt.Time(b.Ended), Style = (Style)res["TlMonoText"] });
@@ -86,7 +91,7 @@ public sealed partial class HistoryView : UserControl, IPanelPage
         Cell(g, 3, pill);
         var result = new StackPanel { Spacing = 4 };
         var resultText = running
-            ? $"{b.Done:N0} / {b.Total:N0} steps · {Fmt.Duration(b.Started, null)}"
+            ? (b.TotalIsEstimate ? $"{b.Done:N0} of up to {b.Total:N0} steps · {Fmt.Duration(b.Started, null)}" : $"{b.Done:N0} / {b.Total:N0} steps · {Fmt.Duration(b.Started, null)}")
             : $"{b.Result ?? "—"} · {Fmt.Duration(b.Started, b.Ended)}";
         result.Children.Add(new TextBlock { Text = resultText, Foreground = (Brush)res["TlTextSecondary"], TextTrimming = TextTrimming.CharacterEllipsis });
         if (running) result.Children.Add(new Bar { BarHeight = 5, Value = b.Total > 0 ? (double)b.Done / b.Total : 0 });

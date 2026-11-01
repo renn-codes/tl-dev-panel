@@ -17,7 +17,11 @@
         </Grid.ColumnDefinitions>
         <Border Style="{StaticResource TlCardStyle}">
           <StackPanel Spacing="14">
-            <TextBlock Style="{StaticResource TlCardTitle}" Text="CURRENT BUILD" />
+            <TextBlock x:Name="BuildCardTitle" Style="{StaticResource TlCardTitle}" Text="CURRENT BUILD" />
+            <ScrollViewer x:Name="TabsScroller" Visibility="Collapsed" HorizontalScrollMode="Auto" HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled">
+              <StackPanel x:Name="BuildTabs" Orientation="Horizontal" Spacing="6" Padding="0,0,0,4" />
+            </ScrollViewer>
             <v:BuildDash x:Name="Dash" MaxObjects="6" />
           </StackPanel>
         </Border>

@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.3.0**
+**Version 1.4.0**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -91,6 +91,25 @@ The panel never force-kills `worldserver`, `authserver`, `mysql` or `mysqld`:
 - Worldserver: use `server shutdown 0h0m10s`, or the Shutdown button.
 - Authserver: use Ctrl + C.
 - MySQL: type `exit`.
+
+## Concurrent and external builds
+The panel also notices ninja builds it didn't start, such as `ninja` run in an SSH terminal. Each one is added to **History** as a numbered build tagged *external*, alongside the panel's own builds.
+
+- **Detection:** every 2 seconds the panel scans for `ninja` processes in a directory containing `build.ninja`. It skips its own builds, `ninja -t …` tools, `ninja -n` dry runs, and CMake's configure-time test builds under `CMakeFiles/`.
+- **Progress:** an external build's terminal output belongs to the terminal that started it, so the panel can't show it. Instead:
+  - finished steps are read from `.ninja_log` (ninja writes a line as each step completes) and listed live in the Build Console terminal;
+  - the objects currently compiling come from the process tree;
+  - the step total comes from a dry run every 10 seconds. That dry run runs in a private mount namespace with *copies* of `.ninja_log` and `.ninja_deps` mounted over the originals, because a plain `ninja -n` can truncate a half-written `.ninja_deps` record and damage the running build. On hosts that don't allow mount namespaces, the total falls back to an estimate (all commands, not just out-of-date ones), labelled "of up to N steps (estimate)".
+  - Steps that finished before the panel spotted the build (normally only the first second or two) aren't counted.
+- **Outcome:** an external build's exit code can't be read by another process, so when it ends the panel checks which outputs are still out of date with `ninja -n -d explain`:
+  - none left: *Completed*;
+  - some left: *Failed* ("Ended with N output(s) still out of date").
+  - Steps that are out of date by design are ignored, such as AzerothCore's revision header, which is regenerated on every build.
+- **Several builds at once:** builds can run concurrently in *different* directories. Start, Prepare and Clean are refused only when a build (panel or external) is already running in the current build directory, because two ninjas in one tree corrupt each other's state.
+  - **Overview:** shows a tab per running build.
+  - **Build Console:** has a dropdown to switch the status and terminal between them.
+  - Both share the same selection.
+- **Force Stop:** acts on the selected build. An external build is sent SIGTERM (like Ctrl + C in its terminal) and recorded as *Stopped from the panel*.
 
 ## CPU threads
 The **CPU threads** row in the Build Console sets how many parallel jobs ninja uses. The panel detects the host's CPU layout and memory, and builds the slider range from what it finds.

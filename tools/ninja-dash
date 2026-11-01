@@ -48,9 +48,11 @@ def is_ninja_dash(pid):
         return False
 
 
-def running_build():
+def running_build(build_dir):
+    """A build already running in the same directory (builds in other directories may run concurrently)."""
     if not os.path.isdir(BUILDS):
         return None
+    target = os.path.realpath(build_dir)
     for d in os.listdir(BUILDS):
         p = os.path.join(BUILDS, d, "status.json")
         try:
@@ -58,12 +60,19 @@ def running_build():
                 s = json.load(f)
         except Exception:
             continue
-        if s.get("phase") in ("building", "installing") and is_ninja_dash(s.get("pid")):
+        if s.get("phase") not in ("building", "installing"):
+            continue
+        if os.path.realpath(s.get("buildDir") or "") != target:
+            continue
+        alive = is_ninja_dash(s.get("pid")) if s.get("source", "panel") == "panel" else pid_alive(s.get("pid"))
+        if alive:
             return s
     return None
 
 
 def next_id():
+    """Allocates the next build number. The panel's external-build monitor allocates from the same
+    sequence, so a number is claimed by exclusively creating builds/<n>/.owner."""
     os.makedirs(BUILDS, exist_ok=True)
     counter = os.path.join(HOME, "build-counter")
     n = 0
@@ -75,7 +84,16 @@ def next_id():
     for d in os.listdir(BUILDS):
         if d.isdigit():
             n = max(n, int(d))
-    n += 1
+    while True:
+        n += 1
+        d = os.path.join(BUILDS, str(n))
+        os.makedirs(d, exist_ok=True)
+        try:
+            with open(os.path.join(d, ".owner"), "x") as f:
+                f.write(f"ninja-dash {os.getpid()}\n")
+            break
+        except FileExistsError:
+            continue
     with open(counter, "w") as f:
         f.write(str(n))
     return n
@@ -116,7 +134,7 @@ class Dash:
         known = [v for v in self.durations.values() if v > 0]
         self.avg = (sum(known) / len(known)) if known else 15000
         self.s = {
-            "id": self.id, "pid": os.getpid(), "buildDir": self.build_dir,
+            "id": self.id, "pid": os.getpid(), "buildDir": self.build_dir, "source": "panel",
             "command": build_cmd,
             "installCommand": install_cmd,
             "started": now_iso(), "ended": None, "phase": "building",
@@ -302,9 +320,9 @@ def main(argv):
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):
         print(f"ninja-dash: no build.ninja in {build_dir} (run cmake -G Ninja first)", file=sys.stderr)
         return 2
-    rb = running_build()
+    rb = running_build(build_dir)
     if rb:
-        print(f"ninja-dash: build #{rb['id']} is already running (pid {rb['pid']})", file=sys.stderr)
+        print(f"ninja-dash: build #{rb['id']} is already running in {build_dir} (pid {rb['pid']})", file=sys.stderr)
         return 3
     return Dash(build_dir, build_cmd, install_cmd).main()
 

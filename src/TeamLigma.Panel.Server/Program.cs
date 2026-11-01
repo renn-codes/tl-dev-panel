@@ -20,6 +20,7 @@ builder.Services.AddSingleton<BuildService>();
 builder.Services.AddSingleton<ConsoleService>();
 builder.Services.AddSingleton<SystemMonitor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemMonitor>());
+builder.Services.AddHostedService<ExternalBuildMonitor>();
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 512L * 1024 * 1024);
 
@@ -126,6 +127,7 @@ users.MapPost("/{name}/unlock", (HttpContext ctx, string name, AuthService a) =>
 api.MapGet("/overview", async (BuildService b, SystemMonitor m, ConsoleService c) => new Overview
 {
     Build = b.Current(),
+    Running = b.RunningAll(),
     System = m.Snapshot,
     Servers = await c.StatusAsync(),
     Task = b.Task,
@@ -141,7 +143,7 @@ api.MapGet("/builds/{id:int}/log", (int id, long? offset, bool? full, BuildServi
     return Results.Ok(FileTail.Read(b.LogPath(id), offset ?? -1, "build:" + id, $"Build #{id}",
         s.Phase is "building" or "installing", full ?? false));
 });
-api.MapGet("/build/console", (string? key, long? offset, BuildService b) => b.Console(key, offset ?? -1));
+api.MapGet("/build/console", (string? key, long? offset, int? build, BuildService b) => b.Console(key, offset ?? -1, build));
 api.MapGet("/build/settings", (BuildService b) => b.Settings());
 api.MapGet("/servers", (ConsoleService c) => c.StatusAsync());
 api.MapGet("/servers/{name}/output", (string name, long? offset, ConsoleService c) => c.Output(name, offset ?? -1));
@@ -149,7 +151,7 @@ api.MapGet("/servers/{name}/output", (string name, long? offset, ConsoleService 
 var op = api.MapGroup("").RequireAuthorization("operate");
 op.MapDelete("/builds/{id:int}", (HttpContext ctx, int id, BuildService b, AuthService a) => Logged(ctx, a, $"remove build #{id}", b.Delete(id)));
 op.MapPost("/build/start", async (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "start build", await b.StartBuildAsync()));
-op.MapPost("/build/stop", async (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "force stop build", await b.StopBuildAsync()));
+op.MapPost("/build/stop", async (HttpContext ctx, int? id, BuildService b, AuthService a) => Logged(ctx, a, $"force stop build #{id}", await b.StopBuildAsync(id)));
 op.MapPost("/build/configure", (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "prepare (cmake)", b.Configure()));
 op.MapPost("/build/clean", (HttpContext ctx, BuildService b, AuthService a) => Logged(ctx, a, "clean", b.Clean()));
 op.MapPost("/build/directory", (HttpContext ctx, PathRequest r, BuildService b, AuthService a) => Logged(ctx, a, $"set build directory {r.Path}", b.SetBuildDir(r.Path)));

@@ -96,7 +96,8 @@ public sealed partial class Shell : UserControl
             ConnText.Text = ApiClient.Instance.Connected ? "Connected to panel service" : "Panel service unreachable";
             if (o == null) return;
             VersionText.Text = $"Team Ligma · v{o.Version} · {o.System.Host}";
-            SideBuild.Text = o.Build == null ? "Build —" : $"Build #{o.Build.Id} · {Fmt.PhaseLabel(o.Build.Phase)}";
+            SideBuild.Text = o.Running.Count > 1 ? $"{o.Running.Count} builds running"
+                : o.Build == null ? "Build —" : $"Build #{o.Build.Id} · {Fmt.PhaseLabel(o.Build.Phase)}";
             SideBuildDot.Fill = Fmt.PhaseBrush(o.Build?.Phase);
             Dot(SideWorldDot, o.Servers.FirstOrDefault(s => s.Name == "world")?.ProcessRunning == true);
             Dot(SideAuthDot, o.Servers.FirstOrDefault(s => s.Name == "auth")?.ProcessRunning == true);

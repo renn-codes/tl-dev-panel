@@ -86,7 +86,6 @@ public sealed class BuildService
 
     public ActionResult SetJobs(int? jobs)
     {
-        if (Running() is { } r) return Fail($"Build #{r.Id} is running; the thread count applies from the next build. Stop it first to change now.");
         var cpu = CpuTopology.Detect();
         if (jobs is { } j && (j < cpu.MinJobs || j > cpu.MaxJobs))
             return Fail($"Choose between {cpu.MinJobs} and {cpu.MaxJobs} threads (this host has {cpu.LogicalCpus} logical CPUs).");
@@ -106,7 +105,7 @@ public sealed class BuildService
     {
         var build = EffectiveBuildCommand();
         if (build.Contains("ninja-dash")) return build;
-        return $"screen -dmS build ninja-dash {Quote(BuildDir)} --build-cmd {Quote(build)}" +
+        return $"screen -dmS {SessionFor(BuildDir)} ninja-dash {Quote(BuildDir)} --build-cmd {Quote(build)}" +
                (string.IsNullOrWhiteSpace(_o.InstallCommand) ? "" : $" --install-cmd {Quote(Cmd(_o.InstallCommand))}");
     }
 
@@ -116,7 +115,6 @@ public sealed class BuildService
         var full = Path.GetFullPath(path).TrimEnd('/');
         if (full.Length == 0) full = "/";
         if (!Directory.Exists(full)) return Fail($"{full} does not exist.");
-        if (Running() is { } r) return Fail($"Build #{r.Id} is running; stop it before changing the build directory.");
         if (TaskRunning) return Fail($"Wait for '{Task.Name}' to finish first.");
         _buildDirOverride = full == _o.BuildDir.TrimEnd('/') ? null : full;
         SaveSettings();
@@ -164,7 +162,8 @@ public sealed class BuildService
         {
             var s = JsonSerializer.Deserialize<BuildStatus>(File.ReadAllText(path), Json);
             if (s == null) return null;
-            if (s.Phase is "building" or "installing" && !Shell.IsNinjaDash(s.Pid))
+            var alive = s.Source == BuildSources.External ? Shell.IsProcess(s.Pid, "ninja") : Shell.IsNinjaDash(s.Pid);
+            if (s.Phase is "building" or "installing" && !alive)
             {
                 s.Phase = "interrupted";
                 s.Result ??= "Build process ended unexpectedly";
@@ -184,8 +183,61 @@ public sealed class BuildService
         return list.OrderByDescending(b => b.Started ?? DateTimeOffset.MinValue).ThenByDescending(b => b.Id).ToList();
     }
 
-    public BuildStatus? Running() => All().FirstOrDefault(b => b.Phase is "building" or "installing");
+    public static bool IsActive(BuildStatus b) => b.Phase is "building" or "installing";
+
+    /// <summary>Every running build (panel and external), newest first.</summary>
+    public List<BuildStatus> RunningAll() => All().Where(IsActive).ToList();
+
+    /// <summary>The most recent running build, if any.</summary>
+    public BuildStatus? Running() => RunningAll().FirstOrDefault();
+
+    /// <summary>A build running in the given directory: two ninjas in one tree corrupt each other's state.</summary>
+    public BuildStatus? RunningIn(string dir)
+    {
+        var target = Normalize(dir);
+        return RunningAll().FirstOrDefault(b => b.BuildDir != null && Normalize(b.BuildDir) == target);
+    }
+
+    static string Normalize(string dir)
+    {
+        try { dir = Path.GetFullPath(dir); } catch { }
+        try { var real = new DirectoryInfo(dir).ResolveLinkTarget(true); if (real != null) dir = real.FullName; } catch { }
+        return dir.TrimEnd('/');
+    }
+
     public BuildStatus? Current() => Running() ?? All().FirstOrDefault();
+
+    /// <summary>Screen session name for a panel build in a directory, so builds in different directories don't collide.</summary>
+    public static string SessionFor(string dir)
+        => "build-" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(Normalize(dir))))[..8].ToLowerInvariant();
+
+    /// <summary>Claims the next build number. ninja-dash uses the same scheme: exclusive creation of builds/&lt;n&gt;/.owner.</summary>
+    public int AllocateId(string owner)
+    {
+        Directory.CreateDirectory(_o.BuildsDir);
+        var counterPath = Path.Combine(_o.DataHome, "build-counter");
+        var n = 0;
+        try { n = int.Parse(File.ReadAllText(counterPath).Trim()); } catch { }
+        foreach (var d in Directory.GetDirectories(_o.BuildsDir))
+            if (int.TryParse(Path.GetFileName(d), out var id)) n = Math.Max(n, id);
+        while (true)
+        {
+            n++;
+            var dir = Path.Combine(_o.BuildsDir, n.ToString());
+            Directory.CreateDirectory(dir);
+            try
+            {
+                using var f = new FileStream(Path.Combine(dir, ".owner"), FileMode.CreateNew);
+                f.Write(System.Text.Encoding.UTF8.GetBytes(owner + "\n"));
+                break;
+            }
+            catch (IOException) { }
+        }
+        File.WriteAllText(counterPath, n.ToString());
+        return n;
+    }
+
+    public string BuildDirOf(int id) => Path.Combine(_o.BuildsDir, id.ToString());
 
     public string LogPath(int id) => Path.Combine(_o.BuildsDir, id.ToString(), "build.log");
 
@@ -198,14 +250,17 @@ public sealed class BuildService
 
     public async Task<ActionResult> StartBuildAsync()
     {
-        if (Running() is { } r) return Fail($"Build #{r.Id} is already running.");
+        if (RunningIn(BuildDir) is { } r)
+            return Fail($"Build #{r.Id}{(r.Source == BuildSources.External ? " (external)" : "")} is already running in {BuildDir}. " +
+                        "Builds in other directories can run at the same time.");
         if (TaskRunning) return Fail($"Wait for '{Task.Name}' to finish first.");
         if (!Directory.Exists(BuildDir)) return Fail($"The build directory {BuildDir} does not exist. Choose another one or run Prepare (CMake).");
         if (!File.Exists(Path.Combine(BuildDir, "build.ninja")))
             return Fail($"{BuildDir} is not prepared (no build.ninja). Run 'Prepare (CMake)' first.");
 
         // Preflight: everything the screen session needs must be resolvable, or it dies silently.
-        var env = Env("build");
+        var session = SessionFor(BuildDir);
+        var env = Env(session);
         foreach (var tool in new[] { "screen", "ninja-dash", "ninja", "python3" })
             if (Shell.Which(tool, env["PATH"]) == null)
                 return Fail($"'{tool}' was not found on the panel's PATH ({env["PATH"]}). " +
@@ -223,13 +278,13 @@ public sealed class BuildService
         catch { }
 
         var sessions = await Shell.ScreenSessionsAsync();
-        if (sessions.Contains("build"))
-            return Fail("A 'build' screen session is already open on the server. Close it with 'screen -S build -X quit' and try again.");
+        if (sessions.Contains(session))
+            return Fail($"A '{session}' screen session for this directory is already open on the server. Close it with 'screen -S {session} -X quit' and try again.");
 
         // Log the screen window so a failed start can be explained.
-        var launchLog = Path.Combine(_o.ScreenDir, "build-launch.log");
+        var launchLog = Path.Combine(_o.ScreenDir, session + "-launch.log");
         File.WriteAllText(launchLog, "");
-        env["SCREENRC"] = ScreenRc("build", launchLog);
+        env["SCREENRC"] = ScreenRc(session, launchLog);
         var known = All().Select(b => b.Id).DefaultIfEmpty(0).Max();
         var command = LaunchCommand();
         _log.LogInformation("Starting build: {Command} (cwd {Dir})", command, BuildDir);
@@ -240,8 +295,9 @@ public sealed class BuildService
         {
             await System.Threading.Tasks.Task.Delay(150);
             var newest = All().Select(b => b.Id).DefaultIfEmpty(0).Max();
-            if (newest > known) return Ok($"Build #{newest} started.");
-            if (i >= 6 && !(await Shell.ScreenSessionsAsync()).Contains("build"))
+            if (newest > known && Read(newest) is { Source: BuildSources.Panel } nb && nb.BuildDir != null && Normalize(nb.BuildDir) == Normalize(BuildDir))
+                return Ok($"Build #{newest} started.");
+            if (i >= 6 && !(await Shell.ScreenSessionsAsync()).Contains(session))
             {
                 await System.Threading.Tasks.Task.Delay(300); // let screen flush its log
                 var why = File.Exists(launchLog) ? File.ReadAllText(launchLog).Trim() : "";
@@ -269,15 +325,28 @@ public sealed class BuildService
         return Fail($"The build did not start: {first}");
     }
 
-    public async Task<ActionResult> StopBuildAsync()
+    public async Task<ActionResult> StopBuildAsync(int? id)
     {
-        var r = Running();
-        if (r == null) return Fail("No build is running.");
+        var running = RunningAll();
+        var r = id is { } want ? running.FirstOrDefault(b => b.Id == want) : running.Count == 1 ? running[0] : null;
+        if (r == null)
+            return Fail(running.Count == 0 ? "No build is running." : id == null ? "Several builds are running; choose which one to stop." : $"Build #{id} is not running.");
+        if (r.Source == BuildSources.External)
+        {
+            // ninja stops its running commands cleanly on SIGTERM; the monitor records the outcome.
+            ExternalBuildMonitor.StopRequested[r.Pid!.Value] = true;
+            await Shell.RunAsync("kill", new[] { "-TERM", r.Pid!.Value.ToString() });
+            for (var i = 0; i < 50 && Shell.IsProcess(r.Pid, "ninja"); i++) await System.Threading.Tasks.Task.Delay(200);
+            return Shell.IsProcess(r.Pid, "ninja")
+                ? Fail($"Build #{r.Id} (external ninja, pid {r.Pid}) did not stop within 10 seconds.")
+                : Ok($"Build #{r.Id} (external) stopped.");
+        }
         // ninja-dash traps SIGTERM, stops ninja's process group and records the build as stopped.
         await Shell.RunAsync("kill", new[] { "-TERM", r.Pid!.Value.ToString() });
         for (var i = 0; i < 50 && Shell.IsNinjaDash(r.Pid); i++) await System.Threading.Tasks.Task.Delay(200);
+        var session = r.BuildDir != null ? SessionFor(r.BuildDir) : "build";
         var sessions = await Shell.ScreenSessionsAsync();
-        if (sessions.Contains("build")) await Shell.RunAsync("screen", new[] { "-S", "build", "-X", "quit" });
+        if (sessions.Contains(session)) await Shell.RunAsync("screen", new[] { "-S", session, "-X", "quit" });
         return Ok($"Build #{r.Id} stopped.");
     }
 
@@ -305,7 +374,7 @@ public sealed class BuildService
 
     ActionResult StartTask(string name, string command)
     {
-        if (Running() is { } r) return Fail($"Build #{r.Id} is running; stop it first.");
+        if (RunningIn(BuildDir) is { } r) return Fail($"Build #{r.Id} is running in {BuildDir}; stop it first.");
         lock (_taskLock)
         {
             if (_taskState.Running) return Fail($"'{_taskState.Name}' is already running.");
@@ -359,8 +428,16 @@ public sealed class BuildService
     }
 
     /// <summary>Console for the Build Console page: the running task, else the current build.</summary>
-    public LogChunk Console(string? key, long offset)
+    public LogChunk Console(string? key, long offset, int? buildId = null)
     {
+        if (buildId is { } bid && Read(bid) is { } chosen)
+        {
+            var k = "build:" + chosen.Id;
+            var t = $"Build #{chosen.Id}" + (chosen.Source == BuildSources.External ? " (external)" : "");
+            var ch = FileTail.Read(LogPath(chosen.Id), key == k ? offset : -1, k, t, IsActive(chosen));
+            if (key != k) ch.Reset = true;
+            return ch;
+        }
         var current = Current();
         var task = Task;
         string newKey, title, path;

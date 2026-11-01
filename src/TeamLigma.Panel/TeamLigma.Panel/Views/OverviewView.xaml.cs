@@ -20,14 +20,63 @@ public sealed partial class OverviewView : UserControl, IPanelPage
         InitializeComponent();
         RxSpark.Stroke = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x6C, 0xA0, 0xDC));
         RxSpark.AreaFill = new SolidColorBrush(Windows.UI.Color.FromArgb(40, 0x6C, 0xA0, 0xDC));
+        BuildSelection.Changed += () => DispatcherQueue.TryEnqueue(OnSelectionChanged);
     }
 
     public void SetActive(bool active) => _active = active;
 
+    Overview? _last;
+    string _tabsSignature = "";
+    readonly Dictionary<int, Button> _tabs = new();
+
+    void OnSelectionChanged() { if (_last != null) { UpdateTabs(_last); Dash.Update(BuildSelection.Resolve(_last)); } }
+
+    /// <summary>One tab per running build when more than one is running. Rebuilt only when the set changes.</summary>
+    void UpdateTabs(Overview o)
+    {
+        var multi = o.Running.Count > 1;
+        TabsScroller.Visibility = multi ? Visibility.Visible : Visibility.Collapsed;
+        BuildCardTitle.Text = multi ? $"RUNNING BUILDS ({o.Running.Count})" : o.Running.Count == 1 ? "CURRENT BUILD" : "LATEST BUILD";
+        var sig = string.Join(",", o.Running.Select(b => b.Id));
+        if (sig != _tabsSignature)
+        {
+            _tabsSignature = sig;
+            BuildTabs.Children.Clear();
+            _tabs.Clear();
+            foreach (var b in o.Running)
+            {
+                var id = b.Id;
+                var tab = new Button
+                {
+                    Content = BuildSelection.Label(b),
+                    Padding = new Thickness(12, 5, 12, 5),
+                    FontSize = 12.5,
+                    CornerRadius = new CornerRadius(14),
+                    BorderThickness = new Thickness(1),
+                };
+                tab.Click += (_, _) => BuildSelection.Select(id);
+                BuildTabs.Children.Add(tab);
+                _tabs[id] = tab;
+            }
+        }
+        var selected = BuildSelection.Resolve(o)?.Id;
+        var res = Application.Current.Resources;
+        foreach (var (id, tab) in _tabs)
+        {
+            var on = id == selected;
+            var bg = (Brush)res[on ? "TlAccentSoft" : "TlCard"];
+            var border = (Brush)res[on ? "TlAccent" : "TlCardBorder"];
+            if (tab.Background != bg) tab.Background = bg;
+            if (tab.BorderBrush != border) tab.BorderBrush = border;
+        }
+    }
+
     public void OnOverview(Overview o)
     {
+        _last = o;
         if (!_active) return;
-        Dash.Update(o.Build);
+        UpdateTabs(o);
+        Dash.Update(BuildSelection.Resolve(o));
         var s = o.System;
 
         CpuGauge.Percent = s.Cpu;

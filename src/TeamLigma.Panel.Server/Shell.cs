@@ -98,6 +98,13 @@ public static class Shell
         catch { return false; }
     }
 
+    /// <summary>True when the pid is alive and its executable name (comm) matches.</summary>
+    public static bool IsProcess(int? pid, string comm)
+    {
+        if (!PidAlive(pid)) return false;
+        try { return File.ReadAllText($"/proc/{pid}/comm").Trim() == comm; } catch { return false; }
+    }
+
     /// <summary>Resolves an executable on a PATH string, like `command -v`.</summary>
     public static string? Which(string name, string path)
     {
