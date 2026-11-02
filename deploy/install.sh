@@ -8,11 +8,11 @@ PANEL=/roc/claude/panel
 
 echo "==> Installing tl-build-runner"
 install -m 0755 "$ROOT/tools/tl-build-runner" /usr/local/bin/tl-build-runner
-# Up to v1.7.4 the panel installed its runner as /usr/local/bin/ninja-dash. That name belongs to your own
-# tool, so it is never written to any more. Point out a leftover panel copy so it can be replaced.
+# /usr/local/bin/ninja-dash: never created or replaced, unless it already IS a copy of the panel's runner
+# (installed by v1.0-v1.7.4 and deliberately kept). Then it is refreshed so it stays current.
 if [ -f /usr/local/bin/ninja-dash ] && grep -q "Team Ligma build runner" /usr/local/bin/ninja-dash 2>/dev/null; then
-    echo "NOTE: /usr/local/bin/ninja-dash is an old copy of the panel's build runner (installed by panel v1.0-v1.7.4)."
-    echo "      If your own ninja-dash tool used to live there, it was replaced: reinstall it. The panel no longer uses that name."
+    install -m 0755 "$ROOT/tools/tl-build-runner" /usr/local/bin/ninja-dash
+    echo "==> Refreshed /usr/local/bin/ninja-dash (it is a copy of the panel's build runner)"
 fi
 
 echo "==> Publishing backend"

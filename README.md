@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.7.5**
+**Version 1.7.6**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -201,7 +201,15 @@ tl-build-runner <build-dir> --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-
 # TL_RUNNER_HOME overrides /roc/claude/panel-data
 ```
 
-Up to v1.7.4 this runner was installed as `/usr/local/bin/ninja-dash`, which clashed with the separate `ninja-dash` tool on the build server. It was renamed, and deploys never write to `/usr/local/bin/ninja-dash`. If `install.sh` finds an old panel copy there, it says so, so you can reinstall your own tool.
+Up to v1.7.4 this runner was installed as `/usr/local/bin/ninja-dash`. It has been renamed, and deploys never create or replace `/usr/local/bin/ninja-dash`, with one exception: if that file **is** a copy of the panel's runner (it contains the "Team Ligma build runner" marker), `install.sh` refreshes it so it stays current. That means the original command keeps working:
+
+```bash
+screen -dmS build ninja-dash /roc/claude/claude-acore/build -- -j8 -k 0
+```
+
+The panel recognises its runner by that marker, whatever the file is called, so builds started this way get a single, live build record.
+
+If the runner can't write a record (for example when run as a user without write access to `panel-data`), it prints a note and runs the build anyway. The panel then follows it as an external build.
 
 ## Layout on disk
 

@@ -37,15 +37,28 @@ def pid_alive(pid):
         return False
 
 
+MARKER = b"Team Ligma build runner"
+
+
 def is_runner(pid):
-    """Alive AND actually tl-build-runner: pids are reused after a reboot or container restart."""
+    """Alive AND actually this build runner (under any file name, e.g. a copy installed as ninja-dash).
+    Pids are reused after a reboot or container restart, so the name alone is not enough."""
     if not pid_alive(pid):
         return False
     try:
         with open(f"/proc/{pid}/cmdline", "rb") as f:
-            return b"tl-build-runner" in f.read()
+            args = [a for a in f.read().split(b"\0") if a]
     except OSError:
         return False
+    for a in args[:3]:
+        if a.startswith(b"/") and os.path.isfile(a):
+            try:
+                with open(a, "rb") as f:
+                    if MARKER in f.read(4096):
+                        return True
+            except OSError:
+                pass
+    return any(b"tl-build-runner" in a for a in args[:3])
 
 
 def running_build(build_dir):
@@ -324,7 +337,17 @@ def main(argv):
     if rb:
         print(f"tl-build-runner: build #{rb['id']} is already running in {build_dir} (pid {rb['pid']})", file=sys.stderr)
         return 3
-    return Dash(build_dir, build_cmd, install_cmd).main()
+    try:
+        dash = Dash(build_dir, build_cmd, install_cmd)
+    except PermissionError as e:
+        # Can't write a build record (e.g. run as a user without access to the panel's data folder).
+        # Run the build anyway; the panel's external-build monitor picks it up and records it.
+        print(f"tl-build-runner: can't record this build ({e}); running it without a record - "
+              "the panel will follow it as an external build.", file=sys.stderr)
+        os.chdir(build_dir)
+        line = build_cmd + (f" && {install_cmd}" if install_cmd else "")
+        os.execvp("bash", ["bash", "-c", line])
+    return dash.main()
 
 
 if __name__ == "__main__":

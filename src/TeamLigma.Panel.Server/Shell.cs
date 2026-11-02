@@ -116,11 +116,43 @@ public static class Shell
     /// <summary>The panel's build runner (tools/tl-build-runner, installed to /usr/local/bin).</summary>
     public const string Runner = "tl-build-runner";
 
-    /// <summary>True only when the pid is alive AND is the panel's build runner (pids get reused after reboots).</summary>
+    /// <summary>
+    /// True only when the pid is alive AND is the panel's build runner - under any file name, since a copy may
+    /// be installed as ninja-dash. The script is recognised by its "Team Ligma build runner" marker.
+    /// </summary>
     public static bool IsBuildRunner(int? pid)
     {
         if (!PidAlive(pid)) return false;
-        try { return File.ReadAllText($"/proc/{pid}/cmdline").Replace('\0', ' ').Contains(Runner); }
+        try
+        {
+            var args = File.ReadAllText($"/proc/{pid}/cmdline").Split('\0', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var a in args.Take(3))
+                if (a.StartsWith('/') && IsRunnerScript(a)) return true;
+            return args.Take(3).Any(a => a.Contains(Runner));
+        }
+        catch { return false; }
+    }
+
+    static readonly Dictionary<string, (DateTime Mtime, bool IsRunner)> RunnerScripts = new();
+
+    /// <summary>Whether a file is the panel's runner script (cached by modification time).</summary>
+    public static bool IsRunnerScript(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists || info.Length > 1_000_000) return false;
+            lock (RunnerScripts)
+            {
+                if (RunnerScripts.TryGetValue(path, out var hit) && hit.Mtime == info.LastWriteTimeUtc) return hit.IsRunner;
+                using var fs = info.OpenRead();
+                var buf = new byte[4096];
+                var n = fs.Read(buf, 0, buf.Length);
+                var yes = System.Text.Encoding.UTF8.GetString(buf, 0, n).Contains("Team Ligma build runner");
+                RunnerScripts[path] = (info.LastWriteTimeUtc, yes);
+                return yes;
+            }
+        }
         catch { return false; }
     }
 
