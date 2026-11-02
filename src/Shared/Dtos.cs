@@ -378,3 +378,23 @@ public sealed class DetectedTools
 {
     public Dictionary<string, string> Paths { get; set; } = new();
 }
+
+// ---------------- External build detection diagnostics (v1.7.3) ----------------
+
+public sealed class NinjaProcessInfo
+{
+    public int Pid { get; set; }
+    public string User { get; set; } = "";
+    public string Command { get; set; } = "";
+    public string? Directory { get; set; }
+    /// <summary>"followed", "panel", "skipped" or "retrying".</summary>
+    public string Decision { get; set; } = "";
+    public string Reason { get; set; } = "";
+    public int? BuildId { get; set; }
+}
+
+public sealed class ExternalScanResult
+{
+    public DateTimeOffset At { get; set; }
+    public List<NinjaProcessInfo> Processes { get; set; } = new();
+}

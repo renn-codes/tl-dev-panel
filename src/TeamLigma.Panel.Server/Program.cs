@@ -22,7 +22,8 @@ builder.Services.AddSingleton<BuildService>();
 builder.Services.AddSingleton<ConsoleService>();
 builder.Services.AddSingleton<SystemMonitor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemMonitor>());
-builder.Services.AddHostedService<ExternalBuildMonitor>();
+builder.Services.AddSingleton<ExternalBuildMonitor>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ExternalBuildMonitor>());
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 512L * 1024 * 1024);
 
@@ -154,6 +155,7 @@ api.MapGet("/overview", async (BuildService b, SystemMonitor m, ConsoleService c
 });
 
 api.MapGet("/builds", (BuildService b) => b.All());
+api.MapGet("/builds/external/scan", (ExternalBuildMonitor m) => m.LastScan);
 api.MapGet("/builds/{id:int}", (int id, BuildService b) => b.Read(id) is { } s ? Results.Ok(s) : Results.NotFound());
 api.MapGet("/builds/{id:int}/log", (int id, long? offset, bool? full, BuildService b) =>
 {

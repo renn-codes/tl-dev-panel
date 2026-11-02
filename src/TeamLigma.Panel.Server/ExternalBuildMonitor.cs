@@ -20,7 +20,13 @@ public sealed class ExternalBuildMonitor : BackgroundService
     readonly BuildService _builds;
     readonly ILogger<ExternalBuildMonitor> _log;
     readonly Dictionary<int, Observed> _observed = new();
-    readonly HashSet<int> _ignored = new();
+    /// <summary>Ninja processes that are not followed: why, and when to look again (null = never).</summary>
+    readonly Dictionary<int, (string Reason, bool Permanent, DateTime Next)> _skipped = new();
+    readonly object _scanLock = new();
+    ExternalScanResult _lastScan = new();
+
+    /// <summary>What the monitor saw on its last scan, for the "Why isn't my build listed?" view.</summary>
+    public ExternalScanResult LastScan { get { lock (_scanLock) return _lastScan; } }
     readonly int _self = Environment.ProcessId;
     bool _isolationUnavailable;
     readonly string _tmp;
@@ -104,22 +110,32 @@ public sealed class ExternalBuildMonitor : BackgroundService
         var procs = ProcTable.Read();
 
         // 1) discover new external ninja processes
+        var now = DateTime.UtcNow;
+        var panelPids = _builds.RunningAll().Where(b => b.Source == BuildSources.Panel && b.Pid != null).Select(b => b.Pid!.Value).ToHashSet();
         foreach (var (pid, p) in procs)
         {
-            if (p.Comm != "ninja" || _observed.ContainsKey(pid) || _ignored.Contains(pid)) continue;
-            if (!IsExternalBuild(pid, p, procs, out var dir, out var targets))
+            if (!IsNinja(p) || _observed.ContainsKey(pid)) continue;
+            if (_skipped.TryGetValue(pid, out var sk) && (sk.Permanent || now < sk.Next)) continue;
+            var verdict = Classify(pid, p, procs, panelPids, out var dir, out var targets);
+            if (verdict == null)
             {
-                _ignored.Add(pid);
+                _skipped.Remove(pid);
+                await Adopt(pid, p, dir, targets);
                 continue;
             }
-            await Adopt(pid, p, dir, targets);
+            var (reason, permanent) = verdict.Value;
+            if (!_skipped.ContainsKey(pid))
+                _log.LogInformation("Not following ninja pid {Pid} ({Command}): {Reason}", pid, string.Join(' ', p.Args), reason);
+            // Transient reasons (e.g. build.ninja being regenerated) are re-checked while the process runs.
+            _skipped[pid] = (reason, permanent, now.AddSeconds(5));
         }
-        _ignored.RemoveWhere(pid => !procs.ContainsKey(pid));
+        foreach (var gone in _skipped.Keys.Where(k => !procs.ContainsKey(k)).ToList()) _skipped.Remove(gone);
+        RecordScan(procs);
 
         // 2) update the builds we follow
         foreach (var o in _observed.Values.ToList())
         {
-            if (procs.TryGetValue(o.Pid, out var p) && p.Comm == "ninja")
+            if (procs.TryGetValue(o.Pid, out var p) && IsNinja(p))
             {
                 Update(o, procs);
                 if (!o.Install && DateTime.UtcNow >= o.NextRemainingCheck)
@@ -132,37 +148,83 @@ public sealed class ExternalBuildMonitor : BackgroundService
         }
     }
 
-    bool IsExternalBuild(int pid, ProcTable.Proc p, Dictionary<int, ProcTable.Proc> procs, out string dir, out List<string> targets)
+    /// <summary>ninja under its usual names, or the binary configured in Settings.</summary>
+    static bool IsNinja(ProcTable.Proc p)
+    {
+        if (p.Comm is "ninja" or "ninja-build" or "samu") return true;
+        var configured = Path.GetFileName(NinjaExe);
+        return configured.Length > 0 && p.Comm == (configured.Length > 15 ? configured[..15] : configured);
+    }
+
+    /// <summary>
+    /// Null when the process is an external build to follow; otherwise why not, and whether that can change.
+    /// </summary>
+    (string Reason, bool Permanent)? Classify(int pid, ProcTable.Proc p, Dictionary<int, ProcTable.Proc> procs, HashSet<int> panelPids,
+        out string dir, out List<string> targets)
     {
         dir = "";
         targets = new();
         var args = p.Args.Skip(1).ToList();
-        // Tools (-t), dry runs (-n) and help/version are not builds.
-        if (args.Any(a => a == "-n" || a.StartsWith("-t") || a is "--version" or "-h" or "--help")) return false;
-        // Started by the panel (ninja-dash, tasks, our own probes)?
+        if (args.Any(a => a == "-n" || a.StartsWith("-t") || a is "--version" or "-h" or "--help"))
+            return ("a ninja tool, dry run or help command, not a build", true);
+
+        // Started by the panel? Only a real ninja-dash process (or a panel build/task) counts; text that merely
+        // mentions ninja-dash further up (e.g. the screen session's original command line) does not.
         var q = p.PPid;
         for (var depth = 0; q > 1 && depth < 32 && procs.TryGetValue(q, out var anc); depth++, q = anc.PPid)
         {
-            if (q == _self) return false;
-            if (anc.Args.Any(a => a.Contains("ninja-dash"))) return false;
+            if (q == _self) return ("started by the panel itself (a task or a check)", true);
+            if (panelPids.Contains(q)) return ("part of a build started from the panel (already recorded)", true);
+            if (IsNinjaDash(anc)) return ("run by ninja-dash, which records the build itself", true);
         }
+
         string? cwd = null;
         try { cwd = new FileInfo($"/proc/{pid}/cwd").LinkTarget; } catch { }
-        if (cwd == null) return false;
+        if (cwd == null) return ("its working directory can't be read (the panel needs to run as root)", false);
         dir = cwd;
+        string? buildFile = null;
         for (var i = 0; i < args.Count; i++)
         {
             var a = args[i];
             if (a == "-C" && i + 1 < args.Count) { dir = Path.GetFullPath(Path.Combine(dir, args[++i])); continue; }
             if (a.StartsWith("-C") && a.Length > 2) { dir = Path.GetFullPath(Path.Combine(dir, a[2..])); continue; }
-            if (a is "-f" or "-j" or "-k" or "-l" or "-d" or "-w") { i++; continue; }
+            if (a == "-f" && i + 1 < args.Count) { buildFile = args[++i]; continue; }
+            if (a.StartsWith("-f") && a.Length > 2) { buildFile = a[2..]; continue; }
+            if (a is "-j" or "-k" or "-l" or "-d" or "-w") { i++; continue; }
             if (a.StartsWith('-')) continue;
             targets.Add(a);
         }
-        // CMake's configure-time test projects (try_compile) are not builds.
-        if (dir.Contains("/CMakeFiles/")) return false;
-        return File.Exists(Path.Combine(dir, "build.ninja"));
+        if (dir.Contains("/CMakeFiles/")) return ("a CMake configure-time test build", true);
+        var manifest = Path.Combine(dir, buildFile ?? "build.ninja");
+        if (!File.Exists(manifest)) return ($"no {Path.GetFileName(manifest)} in {dir} (yet)", false);
+        return null;
     }
+
+    static bool IsNinjaDash(ProcTable.Proc p) =>
+        p.Comm == "ninja-dash"
+        || (p.Args.Count > 1 && p.Comm.StartsWith("python") && Path.GetFileName(p.Args[1]) == "ninja-dash");
+
+    void RecordScan(Dictionary<int, ProcTable.Proc> procs)
+    {
+        var list = new List<NinjaProcessInfo>();
+        foreach (var (pid, p) in procs.Where(kv => IsNinja(kv.Value)).OrderBy(kv => kv.Key))
+        {
+            var info = new NinjaProcessInfo { Pid = pid, Command = string.Join(' ', p.Args), User = SafeOwner(pid) };
+            try { info.Directory = new FileInfo($"/proc/{pid}/cwd").LinkTarget; } catch { }
+            if (_observed.TryGetValue(pid, out var o)) { info.Decision = "followed"; info.Reason = "recorded as an external build"; info.BuildId = o.Id; info.Directory = o.Dir; }
+            else if (_skipped.TryGetValue(pid, out var sk))
+            {
+                info.Decision = sk.Reason.StartsWith("part of a build") || sk.Reason.StartsWith("run by ninja-dash") || sk.Reason.StartsWith("started by the panel") ? "panel"
+                    : sk.Permanent ? "skipped" : "retrying";
+                info.Reason = sk.Reason;
+            }
+            else { info.Decision = "retrying"; info.Reason = "just started; checking"; }
+            list.Add(info);
+        }
+        lock (_scanLock) _lastScan = new ExternalScanResult { At = DateTimeOffset.Now, Processes = list };
+    }
+
+    static string SafeOwner(int pid) { try { return Mux.OwnerOf(pid); } catch { return "?"; } }
 
     async Task Adopt(int pid, ProcTable.Proc p, string dir, List<string> targets)
     {

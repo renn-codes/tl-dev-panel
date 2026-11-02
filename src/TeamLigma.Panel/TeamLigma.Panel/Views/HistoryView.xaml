@@ -11,7 +11,11 @@
         <TextBlock Style="{StaticResource TlPageTitle}" Text="History" />
         <TextBlock x:Name="Subtitle" Foreground="{StaticResource TlTextMuted}" Text="Every recorded build, newest first." />
       </StackPanel>
-      <Button HorizontalAlignment="Right" VerticalAlignment="Center" Click="OnRefresh" Content="↻  Refresh" />
+      <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+        <Button Click="OnWhyNotListed" Content="Why isn't my build listed?"
+                ToolTipService.ToolTip="Shows every ninja process the panel can see, and whether it is followed" />
+        <Button Click="OnRefresh" Content="↻  Refresh" />
+      </StackPanel>
     </Grid>
     <Border Grid.Row="1" Style="{StaticResource TlCardStyle}" Padding="0">
       <Grid>

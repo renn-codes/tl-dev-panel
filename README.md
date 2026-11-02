@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.7.2**
+**Version 1.7.3**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -161,7 +161,10 @@ The panel never force-kills `worldserver`, `authserver`, `mysql` or `mysqld`:
 ## Concurrent and external builds
 The panel also notices ninja builds it didn't start, such as `ninja` run in an SSH terminal. Each one is added to **History** as a numbered build tagged *external*, alongside the panel's own builds.
 
-- **Detection:** every 2 seconds the panel scans for `ninja` processes in a directory containing `build.ninja`. It skips its own builds, `ninja -t …` tools, `ninja -n` dry runs, and CMake's configure-time test builds under `CMakeFiles/`.
+- **Detection:** every 2 seconds the panel scans for ninja processes (`ninja`, `ninja-build`, `samu`, or the binary set in Settings) running in a directory with a `build.ninja` (or the file given with `-f`).
+  - **Skipped:** the panel's own builds (an ancestor that is really `ninja-dash`, a panel build or the panel itself), `ninja -t …` tools, `ninja -n` dry runs, and CMake's configure-time test builds under `CMakeFiles/`.
+  - **Re-checked:** a process skipped for a reason that can change, such as `build.ninja` briefly missing, is checked again every 5 seconds while it runs.
+  - **Logged:** every skip is written to the panel log with its reason.
 - **Progress:** an external build's terminal output belongs to the terminal that started it, so the panel can't show it. Instead:
   - finished steps are read from `.ninja_log` (ninja writes a line as each step completes) and listed live in the Build Console terminal;
   - the objects currently compiling come from the process tree;
@@ -249,6 +252,7 @@ Over plain HTTP, passwords and session cookies cross the network unencrypted. On
 - **Builds run out of memory (clang killed, "signal 9"):** lower **CPU threads** to the recommended value or below.
 - **A build shows *Interrupted*:** ninja-dash was killed without cleaning up. Start a new build.
 - **A server shows *Session open* but not *Running*:** the program exited inside its screen session. Read its console for the reason, then press Start again after the session closes.
+- **A build started outside the panel isn't in History:** click **Why isn't my build listed?** on the History page. It lists every ninja process the panel can see, and whether each is followed, recognised as a panel build, or skipped (with the reason). The same reasons are in the panel log (`journalctl -u teamligma-panel`, lines starting "Not following ninja pid"). If the list is empty, the build isn't running on the same machine as the panel, for example it's in another container.
 - **"That code is not valid" for every code:** the server's clock or your phone's clock is wrong. Authenticator codes need both to be within about 30 seconds of the real time.
 - **The page loads but the status dot is red:** check the backend with `curl http://127.0.0.1:5267/api/health`, and read `/roc/claude/panel/server.log` or `journalctl -u teamligma-panel`.
 

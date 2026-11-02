@@ -39,6 +39,62 @@ public sealed partial class HistoryView : UserControl, IPanelPage
 
     async void OnRefresh(object sender, RoutedEventArgs e) => await Refresh(true);
 
+    /// <summary>Lists the ninja processes the panel sees and why each one is (not) followed.</summary>
+    async void OnWhyNotListed(object sender, RoutedEventArgs e)
+    {
+        var scan = await ApiClient.Instance.ExternalScanAsync();
+        var res = Application.Current.Resources;
+        var body = new StackPanel { Spacing = 10, Width = 760 };
+        body.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, Foreground = (Brush)res["TlTextSecondary"],
+            Text = "Builds started outside the panel are picked up within a few seconds when a ninja process is running in a directory with a build.ninja. " +
+                   "These are the ninja processes the panel can see right now:",
+        });
+        if (scan == null) body.Children.Add(new TextBlock { Text = "Could not reach the panel service.", Foreground = (Brush)res["TlDanger"] });
+        else if (scan.Processes.Count == 0)
+            body.Children.Add(new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap, Foreground = (Brush)res["TlText"],
+                Text = "No ninja process is running on this server. If your build is running, check that it runs on the same machine (not in another container or VM) and that it really invokes ninja.",
+            });
+        else
+            foreach (var p in scan.Processes)
+            {
+                var color = p.Decision switch
+                {
+                    "followed" => Windows.UI.Color.FromArgb(255, 0x6F, 0xBF, 0x73),
+                    "panel" => Windows.UI.Color.FromArgb(255, 0x8C, 0xB8, 0xEE),
+                    "retrying" => Windows.UI.Color.FromArgb(255, 0xE0, 0xB3, 0x41),
+                    _ => Windows.UI.Color.FromArgb(255, 0xA8, 0x97, 0x7A),
+                };
+                var row = new Border
+                {
+                    Padding = new Thickness(12, 8, 12, 8), CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1),
+                    BorderBrush = (Brush)res["TlCardBorder"], Background = (Brush)res["TlTerminal"],
+                };
+                var stack = new StackPanel { Spacing = 3 };
+                var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+                head.Children.Add(new TextBlock { Text = $"pid {p.Pid}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, Foreground = (Brush)res["TlText"] });
+                head.Children.Add(new TextBlock { Text = p.Decision == "followed" ? $"Followed as build #{p.BuildId}" : p.Decision == "panel" ? "Panel build" : p.Decision == "retrying" ? "Not yet followed (re-checking)" : "Not followed", Foreground = new SolidColorBrush(color), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+                head.Children.Add(new TextBlock { Text = $"user {p.User}", Style = (Style)res["TlLabel"], VerticalAlignment = VerticalAlignment.Center });
+                stack.Children.Add(head);
+                stack.Children.Add(new TextBlock { Text = p.Command, Style = (Style)res["TlMonoText"], TextWrapping = TextWrapping.Wrap });
+                if (p.Directory != null) stack.Children.Add(new TextBlock { Text = "in " + p.Directory, Style = (Style)res["TlMonoText"] });
+                stack.Children.Add(new TextBlock { Text = p.Reason, Foreground = (Brush)res["TlTextSecondary"], TextWrapping = TextWrapping.Wrap });
+                row.Child = stack;
+                body.Children.Add(row);
+            }
+        var dlg = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Ninja processes on this server",
+            Content = new ScrollViewer { Content = body, MaxHeight = 560, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+            CloseButtonText = "Close",
+        };
+        await dlg.ShowAsync();
+    }
+
     static void Layout(Grid g)
     {
         g.ColumnSpacing = 12;

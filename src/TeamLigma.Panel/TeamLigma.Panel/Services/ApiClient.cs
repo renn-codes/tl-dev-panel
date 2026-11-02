@@ -32,6 +32,7 @@ namespace TeamLigma.Panel.Services;
 [JsonSerializable(typeof(PanelSettingsDto))]
 [JsonSerializable(typeof(SettingsSaveResult))]
 [JsonSerializable(typeof(DetectedTools))]
+[JsonSerializable(typeof(ExternalScanResult))]
 internal partial class PanelJson : JsonSerializerContext { }
 
 /// <summary>Thin client for the panel backend (same origin, proxied by nginx under /api).</summary>
@@ -130,6 +131,7 @@ public sealed class ApiClient
 
     public Task<Overview?> OverviewAsync() => Get("api/overview", PanelJson.Default.Overview);
     public Task<List<BuildStatus>?> BuildsAsync() => Get("api/builds", PanelJson.Default.ListBuildStatus);
+    public Task<ExternalScanResult?> ExternalScanAsync() => Get("api/builds/external/scan", PanelJson.Default.ExternalScanResult);
     public Task<LogChunk?> BuildLogAsync(int id, long offset, bool full = false)
         => Get($"api/builds/{id}/log?offset={offset}&full={(full ? "true" : "false")}", PanelJson.Default.LogChunk);
     public Task<ActionResult> DeleteBuildAsync(int id) => Send(new HttpRequestMessage(HttpMethod.Delete, $"api/builds/{id}"));
