@@ -168,14 +168,14 @@ public sealed class ExternalBuildMonitor : BackgroundService
         if (args.Any(a => a == "-n" || a.StartsWith("-t") || a is "--version" or "-h" or "--help"))
             return ("a ninja tool, dry run or help command, not a build", true);
 
-        // Started by the panel? Only a real ninja-dash process (or a panel build/task) counts; text that merely
-        // mentions ninja-dash further up (e.g. the screen session's original command line) does not.
+        // Started by the panel? Only when an ancestor is a panel build that is actually recorded (its ninja-dash pid
+        // is in a running build record), or the panel itself. A ninja-dash with no panel record - for example your
+        // own ninja-dash tool, or one run by another user - is an external build like any other and is followed.
         var q = p.PPid;
         for (var depth = 0; q > 1 && depth < 32 && procs.TryGetValue(q, out var anc); depth++, q = anc.PPid)
         {
             if (q == _self) return ("started by the panel itself (a task or a check)", true);
             if (panelPids.Contains(q)) return ("part of a build started from the panel (already recorded)", true);
-            if (IsNinjaDash(anc)) return ("run by ninja-dash, which records the build itself", true);
         }
 
         string? cwd = null;
@@ -200,10 +200,6 @@ public sealed class ExternalBuildMonitor : BackgroundService
         return null;
     }
 
-    static bool IsNinjaDash(ProcTable.Proc p) =>
-        p.Comm == "ninja-dash"
-        || (p.Args.Count > 1 && p.Comm.StartsWith("python") && Path.GetFileName(p.Args[1]) == "ninja-dash");
-
     void RecordScan(Dictionary<int, ProcTable.Proc> procs)
     {
         var list = new List<NinjaProcessInfo>();
@@ -214,7 +210,7 @@ public sealed class ExternalBuildMonitor : BackgroundService
             if (_observed.TryGetValue(pid, out var o)) { info.Decision = "followed"; info.Reason = "recorded as an external build"; info.BuildId = o.Id; info.Directory = o.Dir; }
             else if (_skipped.TryGetValue(pid, out var sk))
             {
-                info.Decision = sk.Reason.StartsWith("part of a build") || sk.Reason.StartsWith("run by ninja-dash") || sk.Reason.StartsWith("started by the panel") ? "panel"
+                info.Decision = sk.Reason.StartsWith("part of a build") || sk.Reason.StartsWith("started by the panel") ? "panel"
                     : sk.Permanent ? "skipped" : "retrying";
                 info.Reason = sk.Reason;
             }

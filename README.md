@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.7.3**
+**Version 1.7.4**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -162,7 +162,9 @@ The panel never force-kills `worldserver`, `authserver`, `mysql` or `mysqld`:
 The panel also notices ninja builds it didn't start, such as `ninja` run in an SSH terminal. Each one is added to **History** as a numbered build tagged *external*, alongside the panel's own builds.
 
 - **Detection:** every 2 seconds the panel scans for ninja processes (`ninja`, `ninja-build`, `samu`, or the binary set in Settings) running in a directory with a `build.ninja` (or the file given with `-f`).
-  - **Skipped:** the panel's own builds (an ancestor that is really `ninja-dash`, a panel build or the panel itself), `ninja -t …` tools, `ninja -n` dry runs, and CMake's configure-time test builds under `CMakeFiles/`.
+  - **Skipped:** the panel's own builds, meaning ninja whose ancestor is a *running, recorded* panel build or the panel itself.
+  - **Also skipped:** `ninja -t …` tools, `ninja -n` dry runs, and CMake's configure-time test builds under `CMakeFiles/`.
+  - **Followed:** a build run by any other `ninja-dash`, such as your own `ninja-dash` tool or one run by another user, is followed like any external build.
   - **Re-checked:** a process skipped for a reason that can change, such as `build.ninja` briefly missing, is checked again every 5 seconds while it runs.
   - **Logged:** every skip is written to the panel log with its reason.
 - **Progress:** an external build's terminal output belongs to the terminal that started it, so the panel can't show it. Instead:
