@@ -1,7 +1,7 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.7.4**
+**Version 1.7.5**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
@@ -132,17 +132,17 @@ These are the defaults; **Settings** can change the tool paths, the install dire
 | Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded. A thread count chosen under **CPU threads** replaces the `-j` value. |
 | Prepare (CMake) | `cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DWITH_WARNINGS=0 -DTOOLS_BUILD=all -DSCRIPTS=static -DMODULES=static` |
 | Clean | `ninja -t clean` |
-| Force Stop | Sends SIGTERM to ninja-dash, which stops ninja's process group and records the build as *Stopped* |
+| Force Stop | Sends SIGTERM to tl-build-runner, which stops ninja's process group and records the build as *Stopped* |
 | Worldserver | `screen -dmS world ./worldserver` (cwd `/roc/claude/live/bin`) |
 | Authserver | `screen -dmS auth ./authserver` (cwd `/roc/claude/live/bin`) |
 | MySQL | `screen -dmS mysql mysql -u root -p` (plus `-h`/`-P`/database from Settings) |
 
 All of these are set in `src/TeamLigma.Panel.Server/appsettings.json` (`Panel` section). Start Build uses `BuildCommand` and `InstallCommand`.
 
-Start Build runs inside a detached `screen` session named `build`, through `ninja-dash`, so a build keeps going if the panel restarts. Before launching, the panel checks for the usual problems, and if the build still doesn't start it shows the reason in a notification and in the Build Console terminal:
+Start Build runs inside a detached `screen` session (one per build directory), through the panel's runner `tl-build-runner`, so a build keeps going if the panel restarts. Before launching, the panel checks for the usual problems, and if the build still doesn't start it shows the reason in a notification and in the Build Console terminal:
 - the directory isn't prepared;
-- `screen`, `ninja-dash`, `ninja` or `python3` is missing;
-- `ninja-dash` has Windows line endings;
+- `screen`, `tl-build-runner`, `ninja` or `python3` is missing;
+- `tl-build-runner` has Windows line endings;
 - a `build` screen session is already open.
 
 ## Build directory
@@ -164,7 +164,7 @@ The panel also notices ninja builds it didn't start, such as `ninja` run in an S
 - **Detection:** every 2 seconds the panel scans for ninja processes (`ninja`, `ninja-build`, `samu`, or the binary set in Settings) running in a directory with a `build.ninja` (or the file given with `-f`).
   - **Skipped:** the panel's own builds, meaning ninja whose ancestor is a *running, recorded* panel build or the panel itself.
   - **Also skipped:** `ninja -t …` tools, `ninja -n` dry runs, and CMake's configure-time test builds under `CMakeFiles/`.
-  - **Followed:** a build run by any other `ninja-dash`, such as your own `ninja-dash` tool or one run by another user, is followed like any external build.
+  - **Followed:** a build run by anything else, including your own `ninja-dash` tool or another user's tools, is followed like any external build.
   - **Re-checked:** a process skipped for a reason that can change, such as `build.ninja` briefly missing, is checked again every 5 seconds while it runs.
   - **Logged:** every skip is written to the panel log with its reason.
 - **Progress:** an external build's terminal output belongs to the terminal that started it, so the panel can't show it. Instead:
@@ -191,15 +191,17 @@ The **CPU threads** row in the Build Console sets how many parallel jobs ninja u
 
 The choice is saved in `/roc/claude/panel-data/settings.json`. Operators and administrators can change it, but not while a build is running. Each build's record keeps the exact command it ran, so History shows which `-j` was used.
 
-## ninja-dash
-`tools/ninja-dash` is the wrapper behind **Start Build**. It runs the build command and then the install command through bash, exactly as configured. It mirrors their output to the screen session and records each numbered build under `/roc/claude/panel-data/builds/<n>/`:
+## tl-build-runner
+`tools/tl-build-runner` (installed to `/usr/local/bin/tl-build-runner`) is the wrapper behind **Start Build**. It runs the build command and then the install command through bash, exactly as configured. It mirrors their output to the screen session and records each numbered build under `/roc/claude/panel-data/builds/<n>/`:
 - `status.json`: live phase, step counts, failed targets, result, and the objects currently compiling with elapsed and estimated times. Estimates come from earlier `.ninja_log` timings.
 - `build.log`: the complete build and install log.
 
 ```bash
-ninja-dash <build-dir> --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd 'ninja install'
-# NINJA_DASH_HOME overrides /roc/claude/panel-data
+tl-build-runner <build-dir> --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd 'ninja install'
+# TL_RUNNER_HOME overrides /roc/claude/panel-data
 ```
+
+Up to v1.7.4 this runner was installed as `/usr/local/bin/ninja-dash`, which clashed with the separate `ninja-dash` tool on the build server. It was renamed, and deploys never write to `/usr/local/bin/ninja-dash`. If `install.sh` finds an old panel copy there, it says so, so you can reinstall your own tool.
 
 ## Layout on disk
 
@@ -231,7 +233,7 @@ ninja-dash <build-dir> --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd '
    ```bash
    sudo ./deploy/install.sh
    ```
-   The script installs `ninja-dash` and publishes the backend and the Uno front end. It also installs the nginx site and starts the `teamligma-panel` systemd unit. On hosts without systemd it starts the backend directly.
+   The script installs `tl-build-runner` and publishes the backend and the Uno front end. It also installs the nginx site and starts the `teamligma-panel` systemd unit. On hosts without systemd it starts the backend directly.
 5. Open `http://<host>:26767/` and create the administrator account. Turning on the authenticator app under **My Account** is recommended.
 6. Run **Prepare (CMake)**, then **Start Build**.
 7. After the first install, copy `etc/*.conf.dist` to `.conf`. Set `DataDir` in `worldserver.conf` and put the client data in `/roc/claude/live/data`.
@@ -250,9 +252,9 @@ Over plain HTTP, passwords and session cookies cross the network unencrypted. On
 
 ## Troubleshooting
 - **"Build directory is not prepared":** run Prepare (CMake) first, or choose the right folder with **Change…**.
-- **"The build did not start: …":** the text after the colon is what `ninja-dash` or `screen` printed. The full output is in the Build Console terminal under *Start Build (failed)*.
+- **"The build did not start: …":** the text after the colon is what `tl-build-runner` or `screen` printed. The full output is in the Build Console terminal under *Start Build (failed)*.
 - **Builds run out of memory (clang killed, "signal 9"):** lower **CPU threads** to the recommended value or below.
-- **A build shows *Interrupted*:** ninja-dash was killed without cleaning up. Start a new build.
+- **A build shows *Interrupted*:** tl-build-runner was killed without cleaning up. Start a new build.
 - **A server shows *Session open* but not *Running*:** the program exited inside its screen session. Read its console for the reason, then press Start again after the session closes.
 - **A build started outside the panel isn't in History:** click **Why isn't my build listed?** on the History page. It lists every ninja process the panel can see, and whether each is followed, recognised as a panel build, or skipped (with the reason). The same reasons are in the panel log (`journalctl -u teamligma-panel`, lines starting "Not following ninja pid"). If the list is empty, the build isn't running on the same machine as the panel, for example it's in another container.
 - **"That code is not valid" for every code:** the server's clock or your phone's clock is wrong. Authenticator codes need both to be within about 30 seconds of the real time.

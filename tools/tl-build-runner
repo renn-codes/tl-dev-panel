@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""ninja-dash - Team Ligma build runner.
+"""tl-build-runner - Team Ligma build runner (the panel's own; formerly named ninja-dash).
 
 Usage:
-  ninja-dash BUILD_DIR --build-cmd "CMD" [--install-cmd "CMD"]
-  ninja-dash BUILD_DIR -- [ninja args...]          (legacy: runs `ninja ARGS`, then `ninja install`)
+  tl-build-runner BUILD_DIR --build-cmd "CMD" [--install-cmd "CMD"]
+  tl-build-runner BUILD_DIR -- [ninja args...]     (legacy: runs `ninja ARGS`, then `ninja install`)
 
 Runs the build command (then the install command, only if the build succeeded)
 through bash inside BUILD_DIR, mirroring all output to the terminal while
@@ -11,16 +11,16 @@ recording a numbered build record that the Team Ligma Development Panel reads.
 The panel uses:  --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd 'ninja install'
 
 
-    $NINJA_DASH_HOME/builds/<n>/status.json   live machine-readable status
-    $NINJA_DASH_HOME/builds/<n>/build.log     full build + install log
+    $TL_RUNNER_HOME/builds/<n>/status.json   live machine-readable status
+    $TL_RUNNER_HOME/builds/<n>/build.log     full build + install log
 
-NINJA_DASH_HOME defaults to /roc/claude/panel-data.
-Set NINJA_DASH_NO_INSTALL=1 to skip the install step.
+TL_RUNNER_HOME (or the older NINJA_DASH_HOME) defaults to /roc/claude/panel-data.
+Set TL_RUNNER_NO_INSTALL=1 to skip the install step.
 """
 import json, os, re, shlex, signal, subprocess, sys, threading, time
 from datetime import datetime, timezone
 
-HOME = os.environ.get("NINJA_DASH_HOME", "/roc/claude/panel-data")
+HOME = os.environ.get("TL_RUNNER_HOME") or os.environ.get("NINJA_DASH_HOME") or "/roc/claude/panel-data"
 BUILDS = os.path.join(HOME, "builds")
 STATUS_RE = re.compile(r"^\[(\d+)/(\d+)\]\s*(.*)$")
 
@@ -37,13 +37,13 @@ def pid_alive(pid):
         return False
 
 
-def is_ninja_dash(pid):
-    """Alive AND actually ninja-dash: pids are reused after a reboot or container restart."""
+def is_runner(pid):
+    """Alive AND actually tl-build-runner: pids are reused after a reboot or container restart."""
     if not pid_alive(pid):
         return False
     try:
         with open(f"/proc/{pid}/cmdline", "rb") as f:
-            return b"ninja-dash" in f.read()
+            return b"tl-build-runner" in f.read()
     except OSError:
         return False
 
@@ -64,7 +64,7 @@ def running_build(build_dir):
             continue
         if os.path.realpath(s.get("buildDir") or "") != target:
             continue
-        alive = is_ninja_dash(s.get("pid")) if s.get("source", "panel") == "panel" else pid_alive(s.get("pid"))
+        alive = is_runner(s.get("pid")) if s.get("source", "panel") == "panel" else pid_alive(s.get("pid"))
         if alive:
             return s
     return None
@@ -90,7 +90,7 @@ def next_id():
         os.makedirs(d, exist_ok=True)
         try:
             with open(os.path.join(d, ".owner"), "x") as f:
-                f.write(f"ninja-dash {os.getpid()}\n")
+                f.write(f"tl-build-runner {os.getpid()}\n")
             break
         except FileExistsError:
             continue
@@ -255,11 +255,11 @@ class Dash:
     def main(self):
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             signal.signal(sig, self.stop)
-        self.emit(f"== ninja-dash build #{self.id} started {self.s['started']} in {self.build_dir}")
+        self.emit(f"== tl-build-runner build #{self.id} started {self.s['started']} in {self.build_dir}")
         self.emit("== $ " + self.s["command"])
         rc = self.run(["/bin/bash", "-c", self.build_cmd], self.on_build_line)
         self.s["exitCode"] = rc
-        if not self.stopped and rc == 0 and self.install_cmd and os.environ.get("NINJA_DASH_NO_INSTALL") != "1":
+        if not self.stopped and rc == 0 and self.install_cmd and os.environ.get("TL_RUNNER_NO_INSTALL", os.environ.get("NINJA_DASH_NO_INSTALL")) != "1":
             self.s["phase"], self.s["step"] = "installing", f"Installing ({self.install_cmd})"
             manifest = os.path.join(self.build_dir, "install_manifest.txt")
             try:
@@ -287,7 +287,7 @@ class Dash:
             self.s["phase"] = "completed"
             self.s["result"] = f"Success ({self.s['total']} steps" + (", installed)" if irc == 0 else ")")
         self.s["step"] = self.s["result"]
-        self.emit(f"== ninja-dash build #{self.id} {self.s['phase']}: {self.s['result']}")
+        self.emit(f"== tl-build-runner build #{self.id} {self.s['phase']}: {self.s['result']}")
         self.flush()
         return 0 if self.s["phase"] == "completed" else 1
 
@@ -305,9 +305,9 @@ def parse_args(rest):
         elif rest[i] == "--install-cmd" and i + 1 < len(rest):
             install_cmd = rest[i + 1]; i += 2
         else:
-            raise SystemExit(f"ninja-dash: unexpected argument {rest[i]!r}")
+            raise SystemExit(f"tl-build-runner: unexpected argument {rest[i]!r}")
     if not build_cmd:
-        raise SystemExit("ninja-dash: --build-cmd is required (or use the legacy '-- ninja args' form)")
+        raise SystemExit("tl-build-runner: --build-cmd is required (or use the legacy '-- ninja args' form)")
     return build_cmd, install_cmd or ""
 
 
@@ -318,11 +318,11 @@ def main(argv):
     build_dir = argv[1]
     build_cmd, install_cmd = parse_args(argv[2:])
     if not os.path.isfile(os.path.join(build_dir, "build.ninja")):
-        print(f"ninja-dash: no build.ninja in {build_dir} (run cmake -G Ninja first)", file=sys.stderr)
+        print(f"tl-build-runner: no build.ninja in {build_dir} (run cmake -G Ninja first)", file=sys.stderr)
         return 2
     rb = running_build(build_dir)
     if rb:
-        print(f"ninja-dash: build #{rb['id']} is already running in {build_dir} (pid {rb['pid']})", file=sys.stderr)
+        print(f"tl-build-runner: build #{rb['id']} is already running in {build_dir} (pid {rb['pid']})", file=sys.stderr)
         return 3
     return Dash(build_dir, build_cmd, install_cmd).main()
 

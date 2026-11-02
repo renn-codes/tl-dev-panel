@@ -5,7 +5,7 @@ using TeamLigma.Shared;
 
 namespace TeamLigma.Panel.Server;
 
-/// <summary>Reads ninja-dash build records and drives the build controls.</summary>
+/// <summary>Reads build records (written by tl-build-runner and the external-build monitor) and drives the build controls.</summary>
 public sealed class BuildService
 {
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -64,9 +64,7 @@ public sealed class BuildService
     /// count replaces the command's -j argument.</summary>
     public string EffectiveBuildCommand()
     {
-        var cmd = Cmd(_o.BuildCommand);
-        if (cmd.Contains("ninja-dash")) return cmd; // legacy launch line, used verbatim
-        cmd = _settings.NinjaCommand(cmd);
+        var cmd = _settings.NinjaCommand(Cmd(_o.BuildCommand));
         var cpu = CpuTopology.Detect();
         if (_jobs == null && cpu.LogicalCpus > 1) return cmd;
         var jobs = EffectiveJobs(cpu);
@@ -87,13 +85,11 @@ public sealed class BuildService
     static string Quote(string s) => "'" + s.Replace("'", "'\\''") + "'";
 
     /// <summary>The shell line that starts a build: the configured build/install commands run, verbatim,
-    /// inside a detached screen session through ninja-dash (which records progress and history).
-    /// A BuildCommand that already names ninja-dash (pre-1.2 configs) is used as-is.</summary>
+    /// inside a detached screen session through tl-build-runner (which records progress and history).</summary>
     string LaunchCommand()
     {
         var build = EffectiveBuildCommand();
-        if (build.Contains("ninja-dash")) return build;
-        return $"{SettingsStore.Q(_settings.Screen)} -dmS {SessionFor(BuildDir)} ninja-dash {Quote(BuildDir)} --build-cmd {Quote(build)}" +
+        return $"{SettingsStore.Q(_settings.Screen)} -dmS {SessionFor(BuildDir)} {Shell.Runner} {Quote(BuildDir)} --build-cmd {Quote(build)}" +
                (string.IsNullOrWhiteSpace(_o.InstallCommand) ? "" : $" --install-cmd {Quote(_settings.NinjaCommand(Cmd(_o.InstallCommand)))}");
     }
 
@@ -114,7 +110,7 @@ public sealed class BuildService
 
     public Dictionary<string, string> Env(string screenSession) => new()
     {
-        ["NINJA_DASH_HOME"] = _o.DataHome,
+        ["TL_RUNNER_HOME"] = _o.DataHome,
         ["SCREENRC"] = ScreenRc(screenSession, null),
         ["TERM"] = "xterm-256color",
         ["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -150,7 +146,7 @@ public sealed class BuildService
         {
             var s = JsonSerializer.Deserialize<BuildStatus>(File.ReadAllText(path), Json);
             if (s == null) return null;
-            var alive = s.Source == BuildSources.External ? Shell.IsProcess(s.Pid, "ninja") : Shell.IsNinjaDash(s.Pid);
+            var alive = s.Source == BuildSources.External ? Shell.IsProcess(s.Pid, "ninja") : Shell.IsBuildRunner(s.Pid);
             if (s.Phase is "building" or "installing" && !alive)
             {
                 s.Phase = "interrupted";
@@ -204,7 +200,7 @@ public sealed class BuildService
     public static string SessionFor(string dir)
         => "build-" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(Normalize(dir))))[..8].ToLowerInvariant();
 
-    /// <summary>Claims the next build number. ninja-dash uses the same scheme: exclusive creation of builds/&lt;n&gt;/.owner.</summary>
+    /// <summary>Claims the next build number. tl-build-runner uses the same scheme: exclusive creation of builds/&lt;n&gt;/.owner.</summary>
     public int AllocateId(string owner)
     {
         Directory.CreateDirectory(_o.BuildsDir);
@@ -268,12 +264,12 @@ public sealed class BuildService
         // Preflight: everything the screen session needs must be resolvable, or it dies silently.
         var session = SessionFor(BuildDir);
         var env = Env(session);
-        foreach (var (tool, path) in new[] { ("screen", _settings.Screen), ("ninja-dash", "ninja-dash"), ("ninja", _settings.Ninja), ("python3", "python3") })
+        foreach (var (tool, path) in new[] { ("screen", _settings.Screen), (Shell.Runner, Shell.Runner), ("ninja", _settings.Ninja), ("python3", "python3") })
             if (Shell.Resolve(path, env["PATH"]) == null)
                 return Fail($"'{tool}' was not found ({path}). " +
-                            (tool == "ninja-dash" ? "Re-run deploy/install.sh to install it to /usr/local/bin."
+                            (tool == Shell.Runner ? "Re-run deploy/install.sh to install it to /usr/local/bin."
                              : tool is "screen" or "ninja" ? "Install it, or set its location in Settings." : "Install it on the server."));
-        var nd = Shell.Which("ninja-dash", env["PATH"])!;
+        var nd = Shell.Which(Shell.Runner, env["PATH"])!;
         try
         {
             var head = new byte[256];
@@ -309,10 +305,10 @@ public sealed class BuildService
             {
                 await System.Threading.Tasks.Task.Delay(300); // let screen flush its log
                 var why = File.Exists(launchLog) ? File.ReadAllText(launchLog).Trim() : "";
-                return LaunchFailed(command, string.IsNullOrEmpty(why) ? "ninja-dash exited without output." : why);
+                return LaunchFailed(command, string.IsNullOrEmpty(why) ? "The build runner exited without output." : why);
             }
         }
-        return LaunchFailed(command, "ninja-dash did not register a build within 9 seconds. Check 'screen -r build' on the server.");
+        return LaunchFailed(command, "The build runner did not register a build within 9 seconds. Check 'screen -r build' on the server.");
     }
 
     /// <summary>Records a failed start as a task so its output appears in the Build Console terminal.</summary>
@@ -349,9 +345,9 @@ public sealed class BuildService
                 ? Fail($"Build #{r.Id} (external ninja, pid {r.Pid}) did not stop within 10 seconds.")
                 : Ok($"Build #{r.Id} (external) stopped.");
         }
-        // ninja-dash traps SIGTERM, stops ninja's process group and records the build as stopped.
+        // tl-build-runner traps SIGTERM, stops ninja's process group and records the build as stopped.
         await Shell.RunAsync("kill", new[] { "-TERM", r.Pid!.Value.ToString() });
-        for (var i = 0; i < 50 && Shell.IsNinjaDash(r.Pid); i++) await System.Threading.Tasks.Task.Delay(200);
+        for (var i = 0; i < 50 && Shell.IsBuildRunner(r.Pid); i++) await System.Threading.Tasks.Task.Delay(200);
         var session = r.BuildDir != null ? SessionFor(r.BuildDir) : "build";
         var sessions = await Shell.ScreenSessionsAsync();
         if (sessions.Contains(session)) await Shell.RunAsync(Shell.ScreenExe, new[] { "-S", session, "-X", "quit" });

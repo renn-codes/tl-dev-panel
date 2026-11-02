@@ -168,9 +168,9 @@ public sealed class ExternalBuildMonitor : BackgroundService
         if (args.Any(a => a == "-n" || a.StartsWith("-t") || a is "--version" or "-h" or "--help"))
             return ("a ninja tool, dry run or help command, not a build", true);
 
-        // Started by the panel? Only when an ancestor is a panel build that is actually recorded (its ninja-dash pid
-        // is in a running build record), or the panel itself. A ninja-dash with no panel record - for example your
-        // own ninja-dash tool, or one run by another user - is an external build like any other and is followed.
+        // Started by the panel? Only when an ancestor is a panel build that is actually recorded (its runner pid is
+        // in a running build record), or the panel itself. Anything else - including builds run by other tools
+        // such as a user's own ninja-dash - is an external build and is followed.
         var q = p.PPid;
         for (var depth = 0; q > 1 && depth < 32 && procs.TryGetValue(q, out var anc); depth++, q = anc.PPid)
         {

@@ -300,7 +300,7 @@ public sealed class JobsRequest
 
 public static class BuildSources
 {
-    /// <summary>Started from the panel (Start Build, through ninja-dash).</summary>
+    /// <summary>Started from the panel (Start Build, through tl-build-runner).</summary>
     public const string Panel = "panel";
     /// <summary>A ninja process started outside the panel, detected and observed by it.</summary>
     public const string External = "external";

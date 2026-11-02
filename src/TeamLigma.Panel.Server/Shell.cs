@@ -113,11 +113,14 @@ public static class Shell
         return null;
     }
 
-    /// <summary>True only when the pid is alive AND is a ninja-dash process (pids get reused after reboots).</summary>
-    public static bool IsNinjaDash(int? pid)
+    /// <summary>The panel's build runner (tools/tl-build-runner, installed to /usr/local/bin).</summary>
+    public const string Runner = "tl-build-runner";
+
+    /// <summary>True only when the pid is alive AND is the panel's build runner (pids get reused after reboots).</summary>
+    public static bool IsBuildRunner(int? pid)
     {
         if (!PidAlive(pid)) return false;
-        try { return File.ReadAllText($"/proc/{pid}/cmdline").Replace('\0', ' ').Contains("ninja-dash"); }
+        try { return File.ReadAllText($"/proc/{pid}/cmdline").Replace('\0', ' ').Contains(Runner); }
         catch { return false; }
     }
 
