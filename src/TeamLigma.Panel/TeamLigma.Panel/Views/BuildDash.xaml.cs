@@ -27,14 +27,29 @@ public sealed partial class BuildDash : UserControl
             OverallText.Text = "";
             StepText.Text = "Start a build from the Build Console.";
             DirText.Text = "—";
+            DirLabel.Text = "DIRECTORY";
             ExternalPill.Visibility = Visibility.Collapsed;
             SetObjects(Array.Empty<BuildObject>());
             return;
         }
         var active = b.Phase is "building" or "installing";
         NumberText.Text = $"#{b.Id}";
-        DirText.Text = b.BuildDir ?? "—";
-        ExternalPill.Visibility = b.Source == BuildSources.External ? Visibility.Visible : Visibility.Collapsed;
+        var container = b.Source == BuildSources.Container;
+        DirLabel.Text = container ? "CONTAINER" : "DIRECTORY";
+        DirText.Text = (container ? b.Container : b.BuildDir) ?? "—";
+        ExternalPill.Visibility = b.Source is BuildSources.External or BuildSources.Container ? Visibility.Visible : Visibility.Collapsed;
+        if (container)
+        {
+            SourcePillText.Text = "Container";
+            ExternalPill.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x1D, 0x63, 0xA8));
+            ToolTipService.SetToolTip(ExternalPill, "Runs in a one-shot Docker container started through Portainer. It is removed when the build ends.\n" + b.Command);
+        }
+        else if (b.Source == BuildSources.External)
+        {
+            SourcePillText.Text = "External";
+            ExternalPill.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x3D, 0x5A, 0x80));
+            ToolTipService.SetToolTip(ExternalPill, "Started outside the panel. Its own output can't be captured; finished steps come from .ninja_log.");
+        }
         StartedText.Text = Fmt.Time(b.Started);
         ElapsedText.Text = Fmt.Duration(b.Started, b.Ended);
         StatusText.Text = Fmt.PhaseLabel(b.Phase);

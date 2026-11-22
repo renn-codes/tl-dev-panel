@@ -18,7 +18,9 @@ public sealed class BuildService
     int _taskSeq;
     DateTimeOffset _lastTaskStart = DateTimeOffset.MinValue;
     readonly SettingsStore _settings;
+    readonly IServiceProvider _services;
     int? _jobs => _settings.Jobs;
+    ContainerBuildService Containers => _services.GetRequiredService<ContainerBuildService>();
 
     /// <summary>The active build directory: the one chosen in the Build Console, else the default from Settings.</summary>
     public string BuildDir => _settings.BuildDir;
@@ -27,8 +29,9 @@ public sealed class BuildService
     /// Accepts the {BuildDir} placeholder, and also rewrites the default path in older configs.</summary>
     public string Cmd(string template) => template.Replace(_o.BuildDir, "{BuildDir}").Replace("{BuildDir}", BuildDir);
 
-    public BuildService(IOptions<PanelOptions> o, ILogger<BuildService> log, SettingsStore settings)
+    public BuildService(IOptions<PanelOptions> o, ILogger<BuildService> log, SettingsStore settings, IServiceProvider services)
     {
+        _services = services;
         _o = o.Value;
         _log = log;
         _settings = settings;
@@ -38,7 +41,27 @@ public sealed class BuildService
         _taskSeq = Directory.GetFiles(_o.TasksDir, "*.log").Length;
     }
 
-    public BuildSettings Settings() => new()
+    public BuildSettings Settings()
+    {
+        var s = HostSettings();
+        s.ContainerMode = _settings.ContainerBuilds;
+        if (s.ContainerMode)
+        {
+            _settings.Portainer(out var problem);
+            s.RunnerProblem = problem;
+            s.Runner = $"Docker container via Portainer: custom template #{_settings.PortainerTemplateId?.ToString() ?? "?"} on environment #{_settings.PortainerEndpointId?.ToString() ?? "?"}, as stack {_settings.PortainerStackPrefix}-<build number>, memory limit {MemoryText()}; the container is removed when it stops";
+        }
+        else s.Runner = "This host: ninja-dash in a detached screen session";
+        return s;
+    }
+
+    string MemoryText()
+    {
+        var (value, automatic) = Containers.MemoryLimit();
+        return automatic ? $"{value} (automatic, 2 GB per thread)" : value;
+    }
+
+    BuildSettings HostSettings() => new()
     {
         BuildDir = BuildDir,
         DefaultBuildDir = _settings.DefaultBuildDir,
@@ -57,7 +80,7 @@ public sealed class BuildService
     static readonly System.Text.RegularExpressions.Regex JobsArg =
         new(@"-j\s*(\$\(\(.*?\)\)|\S+)", System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    int EffectiveJobs(CpuInfo cpu) => _jobs is { } j ? Math.Clamp(j, cpu.MinJobs, cpu.MaxJobs) : Math.Max(1, cpu.LogicalCpus - 1);
+    public int EffectiveJobs(CpuInfo cpu) => _jobs is { } j ? Math.Clamp(j, cpu.MinJobs, cpu.MaxJobs) : Math.Max(1, cpu.LogicalCpus - 1);
 
     /// <summary>The build command for the next build. Automatic mode keeps the configured command
     /// (except on single-CPU hosts, where nproc - 1 = 0 would mean unlimited jobs); a chosen thread
@@ -150,6 +173,7 @@ public sealed class BuildService
         {
             var s = JsonSerializer.Deserialize<BuildStatus>(File.ReadAllText(path), Json);
             if (s == null) return null;
+            if (s.Source == BuildSources.Container) return s; // followed through Portainer by ContainerBuildService
             var alive = s.Source == BuildSources.External ? Shell.IsProcess(s.Pid, "ninja") : Shell.IsNinjaDash(s.Pid);
             if (s.Phase is "building" or "installing" && !alive)
             {
@@ -257,6 +281,8 @@ public sealed class BuildService
 
     public async Task<ActionResult> StartBuildAsync()
     {
+        // Container mode: the build runs in a one-shot container from the Portainer custom template.
+        if (_settings.ContainerBuilds) return await Containers.StartAsync();
         if (RunningIn(BuildDir) is { } r)
             return Fail($"Build #{r.Id}{(r.Source == BuildSources.External ? " (external)" : "")} is already running in {BuildDir}. " +
                         "Builds in other directories can run at the same time.");
@@ -339,6 +365,7 @@ public sealed class BuildService
         var r = id is { } want ? running.FirstOrDefault(b => b.Id == want) : running.Count == 1 ? running[0] : null;
         if (r == null)
             return Fail(running.Count == 0 ? "No build is running." : id == null ? "Several builds are running; choose which one to stop." : $"Build #{id} is not running.");
+        if (r.Source == BuildSources.Container) return await Containers.StopAsync(r.Id);
         if (r.Source == BuildSources.External)
         {
             // ninja stops its running commands cleanly on SIGTERM; the monitor records the outcome.
@@ -441,7 +468,7 @@ public sealed class BuildService
         if (buildId is { } bid && Read(bid) is { } chosen)
         {
             var k = "build:" + chosen.Id;
-            var t = $"Build #{chosen.Id}" + (chosen.Source == BuildSources.External ? " (external)" : "");
+            var t = $"Build #{chosen.Id}" + (chosen.Source == BuildSources.External ? " (external)" : chosen.Source == BuildSources.Container ? $" (container {chosen.Container})" : "");
             var ch = FileTail.Read(LogPath(chosen.Id), key == k ? offset : -1, k, t, IsActive(chosen));
             if (key != k) ch.Reset = true;
             return ch;
@@ -461,7 +488,7 @@ public sealed class BuildService
         else if (current != null)
         {
             newKey = "build:" + current.Id;
-            title = $"Build #{current.Id}";
+            title = $"Build #{current.Id}" + (current.Source == BuildSources.Container ? $" (container {current.Container})" : "");
             path = LogPath(current.Id);
             running = current.Phase is "building" or "installing";
         }

@@ -101,7 +101,7 @@ public sealed partial class UsersView : UserControl, IPanelPage
 
     async Task ResetPassword(UserInfo u)
     {
-        var box = new PasswordBox { Header = "New password (10+ characters)", Width = 360 };
+        var box = new PasswordBox { Header = "New password (8+ characters)", Width = 360 };
         var dlg = new ContentDialog { XamlRoot = XamlRoot, Title = $"Reset password for '{u.Username}'", Content = box, PrimaryButtonText = "Reset", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary };
         if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
         Shell.Notify(await ApiClient.Instance.AdminResetPasswordAsync(u.Username, box.Password));

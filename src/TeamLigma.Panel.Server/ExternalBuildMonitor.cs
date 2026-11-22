@@ -139,6 +139,8 @@ public sealed class ExternalBuildMonitor : BackgroundService
         var args = p.Args.Skip(1).ToList();
         // Tools (-t), dry runs (-n) and help/version are not builds.
         if (args.Any(a => a == "-n" || a.StartsWith("-t") || a is "--version" or "-h" or "--help")) return false;
+        // A ninja in another mount namespace runs inside a container (e.g. a container build): not a host build.
+        if (!SameMountNamespace(pid)) return false;
         // Started by the panel (ninja-dash, tasks, our own probes)?
         var q = p.PPid;
         for (var depth = 0; q > 1 && depth < 32 && procs.TryGetValue(q, out var anc); depth++, q = anc.PPid)
@@ -162,6 +164,19 @@ public sealed class ExternalBuildMonitor : BackgroundService
         // CMake's configure-time test projects (try_compile) are not builds.
         if (dir.Contains("/CMakeFiles/")) return false;
         return File.Exists(Path.Combine(dir, "build.ninja"));
+    }
+
+    static readonly string? OwnMountNs = MountNs("self");
+
+    static string? MountNs(string pid)
+    {
+        try { return new FileInfo($"/proc/{pid}/ns/mnt").LinkTarget; } catch { return null; }
+    }
+
+    static bool SameMountNamespace(int pid)
+    {
+        var ns = MountNs(pid.ToString());
+        return ns == null || OwnMountNs == null || ns == OwnMountNs; // unreadable: assume the host
     }
 
     async Task Adopt(int pid, ProcTable.Proc p, string dir, List<string> targets)

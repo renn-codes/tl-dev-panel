@@ -82,6 +82,19 @@
                   ToolTipService.ToolTip="Automatic: one less than the number of logical CPUs (ninja -j$(( $(nproc) - 1 )))" />
         <TextBlock x:Name="CpuInfoText" Grid.Column="4" Style="{StaticResource TlLabel}" VerticalAlignment="Center" TextWrapping="Wrap" />
       </Grid>
+      <Grid ColumnSpacing="14" BorderBrush="{StaticResource TlCardBorder}" BorderThickness="0,1,0,0" Padding="0,10,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Style="{StaticResource TlLabel}" Text="BUILDS RUN ON" VerticalAlignment="Center" Width="104" />
+        <Border x:Name="RunnerPill" Grid.Column="1" CornerRadius="10" Padding="9,2" Background="#555450" VerticalAlignment="Center">
+          <TextBlock x:Name="RunnerKind" FontSize="11.5" FontWeight="SemiBold" Foreground="White" Text="…" />
+        </Border>
+        <TextBlock x:Name="RunnerText" Grid.Column="2" Style="{StaticResource TlLabel}" VerticalAlignment="Center" TextWrapping="Wrap"
+                   ToolTipService.ToolTip="Change this under Settings → Container builds" />
+      </Grid>
       </StackPanel>
     </Border>
 

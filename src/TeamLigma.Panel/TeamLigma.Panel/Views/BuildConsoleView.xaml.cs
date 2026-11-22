@@ -37,7 +37,9 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         var busyHere = o.Running.Any(b => SameDir(b.BuildDir, _settings?.BuildDir));
         var taskRunning = o.Task.Running;
         var can = Session.CanOperate;
-        StartButton.IsEnabled = can && !busyHere && !taskRunning;
+        // A container build doesn't touch this host's build directory, so host builds and tasks don't block it.
+        var container = _settings?.ContainerMode == true;
+        StartButton.IsEnabled = can && (container ? _settings!.RunnerProblem == null : !busyHere && !taskRunning);
         ConfigureButton.IsEnabled = can && !busyHere && !taskRunning;
         CleanButton.IsEnabled = can && !busyHere && !taskRunning;
         StopButton.IsEnabled = can && shown != null && o.Running.Any(b => b.Id == shown.Id);
@@ -65,7 +67,17 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
             : ("No source in parent", Windows.UI.Color.FromArgb(255, 0xC8, 0x40, 0x3A));
         BuildDirState.Text = text;
         BuildDirPill.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
-        ToolTipService.SetToolTip(StartButton, $"In {s.BuildDir}:\n  {s.EffectiveBuildCommand}\n  then {s.InstallCommand}");
+        ToolTipService.SetToolTip(StartButton, s.ContainerMode
+            ? $"Runs in a one-shot Docker container through Portainer ({s.EffectiveJobs} jobs).\n{s.Runner}"
+            : $"In {s.BuildDir}:\n  {s.EffectiveBuildCommand}\n  then {s.InstallCommand}");
+        RunnerKind.Text = s.ContainerMode ? "Docker container" : "This host";
+        RunnerPill.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(s.ContainerMode
+            ? Windows.UI.Color.FromArgb(255, 0x1D, 0x63, 0xA8) : Windows.UI.Color.FromArgb(255, 0x55, 0x54, 0x50));
+        RunnerText.Text = s.RunnerProblem != null ? $"{s.Runner}. Not ready: {s.RunnerProblem}" : s.Runner;
+        RunnerText.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[s.RunnerProblem != null ? "TlAccent" : "TlTextMuted"];
+        Subtitle.Text = s.ContainerMode
+            ? "Builds run in Docker containers through Portainer. Prepare and Clean still act on this host's build directory."
+            : "Prepare, compile, install and clean the AzerothCore tree.";
         ShowJobs(s);
         ToolTipService.SetToolTip(BuildDirPill, s.Ready ? "build.ninja found: Start Build will work."
             : s.SourceFound ? "No build.ninja yet: run Prepare (CMake) first."
@@ -261,6 +273,7 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
         if (target == null) return;
         var id = target.Id;
         var external = target.Source == BuildSources.External;
+        var inContainer = target.Source == BuildSources.Container;
         var dlg = new ContentDialog
         {
             XamlRoot = XamlRoot,
@@ -269,10 +282,12 @@ public sealed partial class BuildConsoleView : UserControl, IPanelPage
             {
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 460,
-                Text = (external
-                    ? $"Build #{id} was started outside the panel (ninja pid {target.Pid}, in {target.BuildDir}). It will be sent SIGTERM, which stops it as if Ctrl + C were pressed in its terminal. "
-                    : $"Build #{id} in {target.BuildDir} will be terminated immediately. ")
-                    + "Objects being compiled right now are discarded and the build is recorded as Stopped. A partially installed server may be left in /roc/claude/live.",
+                Text = inContainer
+                    ? $"Build #{id} runs in container {target.Container}. Docker sends it SIGTERM, then SIGKILL after 10 seconds. The build is recorded as Stopped and its container is removed. A half-installed build is never published to the output folder."
+                    : (external
+                        ? $"Build #{id} was started outside the panel (ninja pid {target.Pid}, in {target.BuildDir}). It will be sent SIGTERM, which stops it as if Ctrl + C were pressed in its terminal. "
+                        : $"Build #{id} in {target.BuildDir} will be terminated immediately. ")
+                      + "Objects being compiled right now are discarded and the build is recorded as Stopped. A partially installed server may be left in /roc/claude/live.",
             },
             PrimaryButtonText = "Force Stop",
             CloseButtonText = "Keep Building",

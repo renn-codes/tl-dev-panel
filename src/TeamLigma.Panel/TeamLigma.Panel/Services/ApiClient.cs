@@ -32,6 +32,8 @@ namespace TeamLigma.Panel.Services;
 [JsonSerializable(typeof(PanelSettingsDto))]
 [JsonSerializable(typeof(SettingsSaveResult))]
 [JsonSerializable(typeof(DetectedTools))]
+[JsonSerializable(typeof(PortainerTestResult))]
+[JsonSerializable(typeof(TemplateVariablesResult))]
 internal partial class PanelJson : JsonSerializerContext { }
 
 /// <summary>Thin client for the panel backend (same origin, proxied by nginx under /api).</summary>
@@ -191,6 +193,14 @@ public sealed class ApiClient
 
     public Task<ActionResult> TestMySqlAsync(PanelSettingsDto s)
         => PostBody("api/settings/mysql/test", s, PanelJson.Default.PanelSettingsDto);
+
+    public async Task<TemplateVariablesResult> TemplateVariablesAsync(PanelSettingsDto s)
+        => await PostJson("api/settings/portainer/variables", s, PanelJson.Default.PanelSettingsDto, PanelJson.Default.TemplateVariablesResult)
+           ?? new TemplateVariablesResult { Message = "The panel service did not answer." };
+
+    public async Task<PortainerTestResult> TestPortainerAsync(PanelSettingsDto s)
+        => await PostJson("api/settings/portainer/test", s, PanelJson.Default.PanelSettingsDto, PanelJson.Default.PortainerTestResult)
+           ?? new PortainerTestResult { Message = "The panel service did not answer." };
 
     // ---- Authentication & accounts ----
     public Task<AuthState?> AuthStateAsync() => Get("api/auth/state", PanelJson.Default.AuthState);

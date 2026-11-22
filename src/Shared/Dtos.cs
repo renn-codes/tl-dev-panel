@@ -18,9 +18,15 @@ public sealed class BuildStatus
 {
     public int Id { get; set; }
     public int? Pid { get; set; }
-    /// <summary>"panel" or "external" (see BuildSources).</summary>
+    /// <summary>"panel", "external" or "container" (see BuildSources).</summary>
     public string Source { get; set; } = BuildSources.Panel;
     public string? BuildDir { get; set; }
+    /// <summary>Container builds: the build container's name (the Portainer stack name until it is found).</summary>
+    public string? Container { get; set; }
+    /// <summary>Container builds: the installed build's folder on the Docker host.</summary>
+    public string? Output { get; set; }
+    /// <summary>Container builds: the Portainer volume that lists the build (named after its version).</summary>
+    public string? Volume { get; set; }
     /// <summary>True when Total is an estimate (external builds: total commands, not just out-of-date ones).</summary>
     public bool TotalIsEstimate { get; set; }
     public string Phase { get; set; } = "unknown";   // building|installing|completed|failed|stopped|interrupted
@@ -242,6 +248,12 @@ public sealed class BuildSettings
     /// <summary>The build command exactly as the next build will run it.</summary>
     public string EffectiveBuildCommand { get; set; } = "";
     public CpuInfo Cpu { get; set; } = new();
+    /// <summary>Start Build runs in a Docker container through Portainer instead of on this host.</summary>
+    public bool ContainerMode { get; set; }
+    /// <summary>Where Start Build runs, in words.</summary>
+    public string Runner { get; set; } = "";
+    /// <summary>Container mode: why Start Build can't work yet (incomplete Portainer settings), else null.</summary>
+    public string? RunnerProblem { get; set; }
 }
 
 public sealed class DirEntry
@@ -298,6 +310,8 @@ public static class BuildSources
     public const string Panel = "panel";
     /// <summary>A ninja process started outside the panel, detected and observed by it.</summary>
     public const string External = "external";
+    /// <summary>Started from the panel in a one-shot Docker container through Portainer (v1.7.0).</summary>
+    public const string Container = "container";
 }
 
 // ---------------- Settings (v1.6.0) ----------------
@@ -354,6 +368,30 @@ public sealed class PanelSettingsDto
     /// <summary>Request only: remove the stored password.</summary>
     public bool MySqlClearPassword { get; set; }
 
+    // Container builds (Portainer BE)
+    public bool ContainerBuilds { get; set; }
+    public string? PortainerUrl { get; set; }
+    public int? PortainerEndpointId { get; set; }
+    public int? PortainerTemplateId { get; set; }
+    public bool PortainerInsecureTls { get; set; }
+    public string? PortainerStackPrefix { get; set; }
+    public string? PortainerService { get; set; }
+    public int? PortainerMaxConcurrent { get; set; }
+    /// <summary>List each successful build in Portainer's Volumes section, named after its version (default on).</summary>
+    public bool PortainerRegisterVolumes { get; set; } = true;
+    /// <summary>Container memory limit for {{ memory_limit }} (e.g. "12g"); empty = automatic, 2 GB per CPU thread.</summary>
+    public string? PortainerMemoryLimit { get; set; }
+    /// <summary>Builder image for {{ builder_image }}, e.g. acore-builder:ubuntu-24.04 or registry.lan/acore-builder:1.2.</summary>
+    public string? PortainerImage { get; set; }
+    /// <summary>Template variables, one "name=value" per line. Secret values come back masked; sending the mask keeps them.</summary>
+    public string? PortainerVariables { get; set; }
+    /// <summary>Response only: whether an access token is stored (it is never sent to the browser).</summary>
+    public bool PortainerApiKeySet { get; set; }
+    /// <summary>Request only: a new access token; null leaves the stored one unchanged.</summary>
+    public string? PortainerNewApiKey { get; set; }
+    /// <summary>Request only: remove the stored access token.</summary>
+    public bool PortainerClearApiKey { get; set; }
+
     // Response only
     public Dictionary<string, string> Defaults { get; set; } = new();
     public List<ToolStatus> Tools { get; set; } = new();
@@ -371,4 +409,65 @@ public sealed class SettingsSaveResult
 public sealed class DetectedTools
 {
     public Dictionary<string, string> Paths { get; set; } = new();
+}
+
+// ---------------- Container builds through Portainer (v1.7.0) ----------------
+
+public static class SecretMask
+{
+    /// <summary>Stands in for a saved secret value; sending it back unchanged keeps the saved value.</summary>
+    public const string Value = "********";
+}
+
+public sealed class TemplateVariableInfo
+{
+    public string Name { get; set; } = "";
+    public string Label { get; set; } = "";
+    /// <summary>The value the next build would use (masked for secrets).</summary>
+    public string Value { get; set; } = "";
+    /// <summary>"settings", "panel", "template default" or "missing".</summary>
+    public string Source { get; set; } = "";
+}
+
+public sealed class PortainerTestResult
+{
+    public bool Ok { get; set; }
+    public string Message { get; set; } = "";
+    public List<string> Details { get; set; } = new();
+    public List<string> Warnings { get; set; } = new();
+    public List<TemplateVariableInfo> Variables { get; set; } = new();
+}
+
+// ---------------- Template variable fields (v1.8.0) ----------------
+
+/// <summary>A form field for one of the custom template's {{ variables }}.</summary>
+public sealed class TemplateField
+{
+    public string Name { get; set; } = "";
+    /// <summary>The label set in Portainer's template editor, else the name.</summary>
+    public string Label { get; set; } = "";
+    public string Description { get; set; } = "";
+    /// <summary>The template's default value ("" = none).</summary>
+    public string Default { get; set; } = "";
+    /// <summary>Shown as a password box; the saved value is never sent (Value is the mask).</summary>
+    public bool Secret { get; set; }
+    /// <summary>The saved value, or SecretMask.Value for a saved secret; "" when nothing is saved.</summary>
+    public string Value { get; set; } = "";
+    public bool HasValue { get; set; }
+    /// <summary>No saved value and no default (left blank, it is passed to the template empty).</summary>
+    public bool Required { get; set; }
+}
+
+public sealed class TemplateVariablesResult
+{
+    public bool Ok { get; set; }
+    public string Message { get; set; } = "";
+    public string TemplateTitle { get; set; } = "";
+    public List<TemplateField> Fields { get; set; } = new();
+    /// <summary>Variables the panel fills itself, with the value the next build would use and the setting behind it.</summary>
+    public List<TemplateVariableInfo> Auto { get; set; } = new();
+    /// <summary>Saved values that override a panel-filled variable, as name=value lines (secrets masked).</summary>
+    public List<string> Overrides { get; set; } = new();
+    /// <summary>Saved values the template doesn't use, as name=value lines (secrets masked).</summary>
+    public List<string> Unused { get; set; } = new();
 }

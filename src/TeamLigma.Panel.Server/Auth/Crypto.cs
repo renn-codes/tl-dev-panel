@@ -30,10 +30,13 @@ public static class Passwords
         catch { return false; }
     }
 
+    /// <summary>Shortest password accepted for panel accounts.</summary>
+    public const int MinLength = 8;
+
     /// <summary>Returns an error message, or null when the password is acceptable.</summary>
     public static string? Validate(string? password)
     {
-        if (string.IsNullOrEmpty(password) || password.Length < 10) return "Passwords must be at least 10 characters.";
+        if (string.IsNullOrEmpty(password) || password.Length < MinLength) return $"Passwords must be at least {MinLength} characters.";
         if (password.Length > 256) return "Passwords must be at most 256 characters.";
         return null;
     }

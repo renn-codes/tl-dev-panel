@@ -24,6 +24,7 @@ public static class BuildSelection
 
     public static string Label(BuildStatus b)
     {
+        if (b.Source == BuildSources.Container) return $"#{b.Id} · {b.Container ?? "container"} · container";
         var dir = b.BuildDir ?? "";
         var parts = dir.TrimEnd('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         var shortDir = parts.Length >= 2 ? $"{parts[^2]}/{parts[^1]}" : dir;

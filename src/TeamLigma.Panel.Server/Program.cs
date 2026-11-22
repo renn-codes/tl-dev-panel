@@ -23,6 +23,8 @@ builder.Services.AddSingleton<ConsoleService>();
 builder.Services.AddSingleton<SystemMonitor>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SystemMonitor>());
 builder.Services.AddHostedService<ExternalBuildMonitor>();
+builder.Services.AddSingleton<ContainerBuildService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ContainerBuildService>());
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 512L * 1024 * 1024);
 
@@ -130,10 +132,18 @@ settings.MapPut("", async (HttpContext ctx, PanelSettingsDto r, SettingsApi s, A
     var result = await s.SaveAsync(r);
     a.Audit(ctx, Admin(ctx), result.Ok
         ? "settings saved" + (r.MySqlClearPassword ? " (MySQL password removed)" : r.MySqlNewPassword is { Length: > 0 } ? " (MySQL password changed)" : "")
+            + (r.PortainerClearApiKey ? " (Portainer token removed)" : r.PortainerNewApiKey is { Length: > 0 } ? " (Portainer token changed)" : "")
         : $"settings save refused: {result.Message}");
     return result;
 });
 settings.MapPost("/detect", (SettingsApi s) => s.Detect());
+settings.MapPost("/portainer/variables", (PanelSettingsDto r, SettingsApi s) => s.TemplateVariablesAsync(r));
+settings.MapPost("/portainer/test", async (HttpContext ctx, PanelSettingsDto r, SettingsApi s, AuthService a) =>
+{
+    var result = await s.TestPortainerAsync(r);
+    a.Audit(ctx, Admin(ctx), "tested Portainer connection: " + (result.Ok ? "ok" : "failed"));
+    return result;
+});
 settings.MapPost("/mysql/test", async (HttpContext ctx, PanelSettingsDto r, SettingsApi s, AuthService a) =>
 {
     var result = await s.TestMySqlAsync(r);

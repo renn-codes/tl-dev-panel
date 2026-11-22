@@ -1,13 +1,13 @@
 <p align="center"><img src="skills/teamligma.png" alt="Team Ligma" width="420"></p>
 
 # Team Ligma Development Panel
-**Version 1.6.0**
+**Version 1.8.1**
 
 One dark, burnt-orange control room for an AzerothCore test realm. Kick off builds, watch every object compile in real time, look back at old logs, and talk to the Worldserver, Authserver and MySQL from your browser. No SSH session needed.
 
 The panel has two parts:
 - **Front end:** C#/.NET 9 on the Uno Platform (WebAssembly, Skia renderer).
-- **Backend:** a small ASP.NET Core service that drives `cmake`, `ninja`, `screen` and `/proc`.
+- **Backend:** a small ASP.NET Core service that drives `cmake`, `ninja`, `screen` and `/proc`, and, for container builds, Portainer BE.
 
 nginx serves both on port **26767**.
 
@@ -22,6 +22,7 @@ Administrators get a **Settings** page. Leave a field empty to use the default s
 | **Build tools** | Paths to CMake, Ninja, the C and C++ compilers (become `-DCMAKE_C_COMPILER` / `-DCMAKE_CXX_COMPILER`) and GNU screen. Each shows whether it was found and its version. **Detect from PATH** fills them in. |
 | **Server executables** | Worldserver, Authserver and MySQL client executables (the server defaults are `<install dir>/bin/…`); optional Worldserver/Authserver config files (passed as `-c`); the Worldserver shutdown delay used by the Shutdown button. |
 | **MySQL login** | Host (empty = local socket), port, user, password, default database, and **auto-login**. With auto-login on, the panel types the saved password at the client's `Enter password:` prompt, so the MySQL console opens logged in. **Test connection** checks the login. |
+| **Container builds (Portainer BE)** | Turns container builds on and sets the Portainer URL, access token, self-signed certificate option, environment ID, custom template ID, stack name prefix, build service, how many container builds may run at once, the build container's memory limit, the builder image, and the template's variables. **Test connection** checks all of it (see [Container builds](#container-builds-portainer-be)). |
 | **Preview** | The exact commands the panel will run with the saved settings. |
 
 How the MySQL password is protected:
@@ -30,6 +31,90 @@ How the MySQL password is protected:
 - it's never placed on a command line: the console uses `mysql -p` and types it at the prompt, and Test connection passes it in the client's environment.
 
 Console input is pasted through a temporary owner-only file that's deleted immediately afterwards.
+
+## Container builds (Portainer BE)
+Hand the heavy lifting to Docker. With **Container builds** on, **Start Build** stops compiling on the panel's host. Instead, Portainer spins up a one-shot builder container from a custom template, and the panel watches it from start to finish.
+
+**What happens on Start Build**
+1. The panel reads the custom template from Portainer and fills its `{{ variable }}` fields.
+2. It deploys the template as a standalone Compose stack named `<prefix>-<build number>`, for example `acore-build-42`.
+3. It follows the container's log through Portainer's Docker API:
+   - the Build Console terminal and History log show the container's output;
+   - the progress bars follow ninja's `[n/total]` lines and the install lines;
+   - the "currently compiling" list comes from the processes running inside the container.
+4. When the container stops, the panel records the result (*Completed*, *Failed* with the stage that failed, *Stopped*, or out of memory). It then **removes the stack, and with it the container**. If Portainer can't be reached at that moment, the panel retries every minute.
+
+**Force Stop** stops the container: SIGTERM, then SIGKILL after 10 seconds. The build is recorded as *Stopped* and the container is removed. If the panel restarts during a build, it carries on following the container where it left off. Container builds are tagged *container* in History, in the Build Console dropdown and on the Overview tabs.
+
+Prepare (CMake) and Clean still act on this host's build directory, and they don't block container builds.
+
+### Setting it up
+1. **Build the image** on the Docker host, from the `tl-build-env` folder:
+   ```bash
+   docker build -t acore-builder:ubuntu-24.04 .
+   ```
+   Alternatively, use Portainer → Images → *Build a new image*, or push the image to a registry the Docker host can pull from. A stack deployed from a template has no build context, so the image must exist first. Rebuild it after changing `Dockerfile` or `build.sh`.
+
+   Any tag works. Set the same name under **Builder image** in Settings (default `acore-builder:ubuntu-24.04`); the panel passes it to the template as `{{ builder_image }}`. A registry image is pulled the first time it's needed. A local tag that doesn't exist fails with *"pull access denied"*.
+2. **Create the custom template.** In Portainer go to Templates → Custom → *Add custom template*, choose type **Standalone / Podman** (Docker Compose) and paste `tl-build-env/docker-compose.portainer.yml`. You can give variables defaults and labels there too. The template ID is the number in its URL.
+3. **Create an access token** under My account → Access tokens. The token's user needs access to the environment and the template.
+4. **Fill in Settings → Container builds:**
+   - URL, token, environment ID and template ID;
+   - the template's variables, which appear as fields once the panel can read the template (see [Template variables](#template-variables)).
+
+   Press **Test connection**. It shows the Portainer version and account, the environment, the template, whether its image is on the Docker host, and the value each variable will get and where it comes from. **Add missing variables** adds a line for each variable that still needs a value.
+5. Turn **Container builds** on and save. The Build Console's **Builds run on** row shows *Docker container*.
+
+### Memory limit
+**Settings → Container builds → Memory limit** sets how much RAM a build container may use, as a Docker size: `12g`, `16384m` or `12GB` (saved as `12g`).
+- **Empty (default):** automatic, 2 GB per CPU thread, capped at the panel machine's RAM minus 1 GB. The field's placeholder shows the current value.
+- **How much:** about 2 GB per thread, plus headroom for linking `worldserver` (it can briefly need 3–4 GB on its own). For example, 4 threads → `10g`, 8 threads → `18g`. Keep it below the Docker host's RAM.
+- **Too low:** the container is killed and the build fails with *"Out of memory"*. Values below 2 GB get a warning when you save.
+
+The Build Console's **Builds run on** line shows the limit the next build will use. A `memory_limit=` line under Template variables overrides the field; **Test connection** warns about that.
+
+### Template variables
+The panel reads the custom template from Portainer and shows **a field for each variable** under Settings → Container builds → Template variables. It does this when the page opens, when the template ID changes, and when you press **Load from template**.
+- **What each field shows:** the label, description and default you gave the variable in Portainer's template editor (Templates → Custom → edit → *Variables*), so it's worth filling those in there. Variables without a definition there, but used as `{{ name }}` in the file, still get a field, labelled with their name.
+- **Blank fields:** use the template's default. A blank field with no default is passed to the template as an empty value and marked *no value yet*, so an optional value (such as `git_username` for a public repository) doesn't block builds.
+- **Secrets:** names containing `pass`, `token`, `secret` or `key` get a password box. A saved value is never sent back to the browser; leave the box empty to keep it, or type a new value.
+- **Filled in by the panel:** `build_number`, `builder_image`, `build_jobs`, `extra_cmake_args` and `memory_limit` are listed with the value the next build would use and the setting it comes from, instead of as fields.
+- **Leftovers:** a saved value that overrides one of those settings, or one the template no longer uses, is flagged with a **Remove** button.
+- **Edit as text (advanced):** switches to the `name=value` editor. Unticking it turns the text back into fields. The text editor is also shown when the template can't be read, for example while Portainer is unreachable.
+
+Values come from, in order:
+- **Always set by the panel:** `build_number`.
+- **Settings:** anything you list there.
+- **Filled in by the panel if you don't set them:**
+
+  | Variable | Value |
+  |---|---|
+  | `builder_image` | **Builder image** |
+  | `build_jobs` | the **CPU threads** value |
+  | `extra_cmake_args` | **Extra CMake options** |
+  | `memory_limit` | **Memory limit**; when that's empty, 2 GB per CPU thread, capped at the host's RAM |
+- **The template's own default.**
+
+A build won't start while a variable has no value.
+
+All variable values are stored encrypted in `settings.json`. Names containing `pass`, `token`, `secret` or `key` are sent back to the browser as `********`; leave that as it is to keep the saved value. The panel escapes `"` and `\` in values placed inside double quotes, so passwords containing them can't break the stack file. Note that Portainer keeps the filled-in stack file, Git password included, for as long as the stack exists. The panel removes the stack when the build ends.
+
+The builder installs each successful build into its own `<output_path>/<version>` folder and writes a `BUILD_INFO.txt` there (it now includes the panel's build number). Point **Server executables** in Settings at the build you want to run.
+
+### Builds in Portainer's Volumes section
+`output_path` is a bind mount: a plain folder on the Docker host, which Portainer doesn't list. So after each **successful** build the panel creates a named volume for it:
+- **Name:** the AzerothCore version from `acore.json` (the commit when there's no version), e.g. `15.0.0-dev`. Later builds of the same version get a suffix: `15.0.0-dev_2`, `15.0.0-dev_3`, … Numbering continues after the highest suffix in use, so deleting `15.0.0-dev_2` doesn't hand that name to a newer build. Characters Docker doesn't allow in volume names become `_`.
+- **What it is:** Docker's `local` driver in bind mode, pointing at `<output_path>/<version>`. The files stay where the builder put them, and the volume can be mounted into other containers to reach that build.
+- **Labels:** `com.teamligma.build` (the panel's build number), `com.teamligma.version` (the AzerothCore version), `com.teamligma.output` (the folder) and `com.teamligma.image` (the builder image). The folder is still the full `<version>_<UTC time>_<commit>` name, so the label tells you exactly which build a volume is.
+- **Deleting it** in Portainer only removes the entry; the build folder and its files stay on disk. Remove the folder itself to free the space.
+
+Failed and stopped builds don't get a volume. The build's folder and volume name are shown in its History tooltip and at the end of its log. Turn this off with *List each successful build in Portainer's Volumes section* in Settings.
+
+### Good to know
+- Leave out a top-level `name:` and `container_name:` in the template, because every build needs its own project and container. Keep `restart: "no"`.
+- For a template with several services, set **Build service** to the one that runs the build.
+- `build.sh` prints `##tl-phase <stage>` lines (clone, configure, build, install, done). The panel uses them to tell which stage failed and hides them from the log.
+- A ninja running inside any container is no longer mistaken for an *external* build on the panel's host.
 
 ## Loading screen
 While the WebAssembly app downloads and starts, the panel shows a dark, fantasy-MMO-styled loading screen:
@@ -66,7 +151,7 @@ The server enforces these rules on every request; the greyed-out controls are on
 From then on, signing in takes your password and then a code from the app. If you don't have the app to hand, choose **Use a recovery code instead**. **My Account** also lets you change your password, generate new recovery codes, or turn two-factor off (this needs your password and a current code).
 
 ### Protection built in
-- **Passwords:** stored as PBKDF2-SHA256 hashes (210,000 iterations). The minimum length is 10 characters.
+- **Passwords:** stored as PBKDF2-SHA256 hashes (210,000 iterations). The minimum length is 8 characters (`Passwords.MinLength` in `src/TeamLigma.Panel.Server/Auth/Crypto.cs`).
 - **Lockout:** 5 wrong passwords or codes lock the account for 5 minutes. An administrator can unlock it sooner.
 - **One-time codes:** each authenticator code works only once, and the clock may drift by one 30-second step either way.
 - **Sessions:** a cookie (`tl_session`, HttpOnly, SameSite=Strict) that ends after 12 idle hours. Changing a password, the 2FA setup or a role signs that user out of every other session, and so does deleting the user.
@@ -94,10 +179,10 @@ These are the defaults; **Settings** can change the tool paths, the install dire
 
 | Control | Command (cwd = the build directory, default `/roc/claude/claude-acore/build`) |
 |---|---|
-| Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded. A thread count chosen under **CPU threads** replaces the `-j` value. |
+| Start Build | `ninja -j$(( $(nproc) - 1 ))`, then `ninja install` if the build succeeded. A thread count chosen under **CPU threads** replaces the `-j` value. With container builds on, it deploys the Portainer template instead (see above). |
 | Prepare (CMake) | `cmake ../ -G Ninja -DCMAKE_INSTALL_PREFIX=/roc/claude/live/ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DWITH_WARNINGS=0 -DTOOLS_BUILD=all -DSCRIPTS=static -DMODULES=static` |
 | Clean | `ninja -t clean` |
-| Force Stop | Sends SIGTERM to ninja-dash, which stops ninja's process group and records the build as *Stopped* |
+| Force Stop | Sends SIGTERM to ninja-dash, which stops ninja's process group and records the build as *Stopped*. A container build's container is stopped and removed. |
 | Worldserver | `screen -dmS world ./worldserver` (cwd `/roc/claude/live/bin`) |
 | Authserver | `screen -dmS auth ./authserver` (cwd `/roc/claude/live/bin`) |
 | MySQL | `screen -dmS mysql mysql -u root -p` (plus `-h`/`-P`/database from Settings) |
@@ -168,7 +253,7 @@ ninja-dash <build-dir> --build-cmd 'ninja -j$(( $(nproc) - 1 ))' --install-cmd '
 | `/roc/claude/claude-acore` | AzerothCore source (`build/` is the Ninja build directory) |
 | `/roc/claude/live` | Installed server (`bin/`, `etc/*.conf`, `data/` client data) |
 | `/roc/claude/panel` | Deployed panel (`wwwroot/` front end, `server/` backend) |
-| `/roc/claude/panel-data` | Build records, console logs, task logs, uploaded `.sql` files, `CREDENTIALS.txt`, `users.json` (accounts, mode 600), `keys/` (data-protection keys), `audit.log` |
+| `/roc/claude/panel-data` | Build records (container builds add `container.json`: stack, container and log position, no secrets), console logs, task logs, uploaded `.sql` files, `CREDENTIALS.txt`, `users.json` (accounts, mode 600), `keys/` (data-protection keys), `audit.log` |
 
 ## Set-up guide (Debian 12 / Ubuntu 24.04)
 1. **Packages**
@@ -213,6 +298,12 @@ Over plain HTTP, passwords and session cookies cross the network unencrypted. On
 - **"The build did not start: …":** the text after the colon is what `ninja-dash` or `screen` printed. The full output is in the Build Console terminal under *Start Build (failed)*.
 - **Builds run out of memory (clang killed, "signal 9"):** lower **CPU threads** to the recommended value or below.
 - **A build shows *Interrupted*:** ninja-dash was killed without cleaning up. Start a new build.
+- **Container build: "Portainer returned 401":** the access token is wrong or was deleted. Paste a new one in Settings.
+- **Container build fails at once with "No such image" / "pull access denied":** the **Builder image** doesn't exist on the Docker host. Build it there with that exact tag, or push it to your registry (see Container builds). **Test connection** says whether the image is present.
+- **Test connection: "The template has a fixed image":** the template in Portainer predates the Builder image setting. Paste the current `tl-build-env/docker-compose.portainer.yml` into it, which uses `image: "{{ builder_image }}"`.
+- **Container build: "Out of memory: the container was OOM-killed":** raise **Memory limit** in Settings, or lower **CPU threads**. clang needs about 2 GB per thread, more for the final worldserver link.
+- **Container build: "Could not remove stack … yet":** Portainer was unreachable when the build ended. The panel retries every minute; you can also delete the stack in Portainer.
+- **Portainer on `https://…:9443` fails with a certificate error:** tick *Accept a self-signed certificate*, or give Portainer a trusted certificate.
 - **A server shows *Session open* but not *Running*:** the program exited inside its screen session. Read its console for the reason, then press Start again after the session closes.
 - **"That code is not valid" for every code:** the server's clock or your phone's clock is wrong. Authenticator codes need both to be within about 30 seconds of the real time.
 - **The page loads but the status dot is red:** check the backend with `curl http://127.0.0.1:5267/api/health`, and read `/roc/claude/panel/server.log` or `journalctl -u teamligma-panel`.

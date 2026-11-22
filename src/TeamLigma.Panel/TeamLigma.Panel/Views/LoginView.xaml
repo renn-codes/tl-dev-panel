@@ -23,7 +23,7 @@
           <PasswordBox x:Name="PassBox" Header="Password" KeyDown="OnKeyDown" />
           <PasswordBox x:Name="ConfirmBox" Header="Confirm password" Visibility="Collapsed" KeyDown="OnKeyDown" />
           <TextBlock x:Name="SetupHint" Visibility="Collapsed" Style="{StaticResource TlLabel}" TextWrapping="Wrap"
-                     Text="At least 10 characters. Usernames: 3-32 lowercase letters, digits, '.', '_' or '-'." />
+                     Text="At least 8 characters. Usernames: 3-32 lowercase letters, digits, '.', '_' or '-'." />
         </StackPanel>
 
         <!-- Step 2: authenticator code -->

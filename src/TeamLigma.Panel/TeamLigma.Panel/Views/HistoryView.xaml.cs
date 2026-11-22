@@ -81,7 +81,15 @@ public sealed partial class HistoryView : UserControl, IPanelPage
         idCell.Children.Add(new TextBlock { Text = $"#{b.Id}", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 16, Foreground = (Brush)res["TlText"] });
         if (b.Source == BuildSources.External)
             idCell.Children.Add(new TextBlock { Text = "external", FontSize = 11, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x8C, 0xB8, 0xEE)) });
-        ToolTipService.SetToolTip(idCell, $"{(b.Source == BuildSources.External ? "Started outside the panel" : "Started from the panel")}\n{b.BuildDir}\n{b.Command}");
+        else if (b.Source == BuildSources.Container)
+            idCell.Children.Add(new TextBlock { Text = "container", FontSize = 11, Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x6C, 0xB4, 0xF0)) });
+        ToolTipService.SetToolTip(idCell, b.Source switch
+        {
+            BuildSources.External => $"Started outside the panel\n{b.BuildDir}\n{b.Command}",
+            BuildSources.Container => $"Ran in a Docker container through Portainer\n{b.Container}\n{b.Command}"
+                + (b.Output != null ? $"\nInstalled to {b.Output}" : "") + (b.Volume != null ? $"\nPortainer volume: {b.Volume}" : ""),
+            _ => $"Started from the panel\n{b.BuildDir}\n{b.Command}",
+        });
         Cell(g, 0, idCell);
         Cell(g, 1, new TextBlock { Text = Fmt.Time(b.Started), Style = (Style)res["TlMonoText"] });
         var running = b.Phase is "building" or "installing";

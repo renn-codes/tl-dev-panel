@@ -24,7 +24,7 @@
           <Grid ColumnSpacing="12">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
             <PasswordBox x:Name="CurrentPass" Header="Current password" />
-            <PasswordBox x:Name="NewPass" Grid.Column="1" Header="New password (10+ characters)" />
+            <PasswordBox x:Name="NewPass" Grid.Column="1" Header="New password (8+ characters)" />
             <PasswordBox x:Name="ConfirmPass" Grid.Column="2" Header="Confirm new password" />
             <Button Grid.Column="3" VerticalAlignment="Bottom" Content="Change password" Click="OnChangePassword" />
           </Grid>

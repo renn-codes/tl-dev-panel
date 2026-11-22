@@ -14,7 +14,7 @@
         <Grid ColumnSpacing="12">
           <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="180" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
           <TextBox x:Name="NewUser" Header="Username" PlaceholderText="lowercase, 3-32 chars" />
-          <PasswordBox x:Name="NewPass" Grid.Column="1" Header="Initial password (10+ characters)" />
+          <PasswordBox x:Name="NewPass" Grid.Column="1" Header="Initial password (8+ characters)" />
           <ComboBox x:Name="NewRole" Grid.Column="2" Header="Role" HorizontalAlignment="Stretch" />
           <Button Grid.Column="3" VerticalAlignment="Bottom" Style="{StaticResource AccentButtonStyle}" Content="Create user" Click="OnCreate" />
         </Grid>
